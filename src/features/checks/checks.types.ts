@@ -114,7 +114,9 @@ export type RuleVerdict = 'suppress' | 'surface';
 
 /**
  * Occurrence-level rules (cascade layer 2), scoped to one chapter assignment.
- * Keyed by occurrence identity `"{snt_id}|{repeated_word}|{ordinal}"`.
+ * Keyed by occurrence identity (built by `buildOccurrenceKey`: the segments
+ * `snt_id`, NFC-normalized `repeated_word`, and `ordinal` joined by a control
+ * separator that cannot appear in the data).
  * Persisted in the editor-state JSONB blob (`checkOccurrenceRules`).
  */
 export type OccurrenceRules = Record<string, RuleVerdict>;
@@ -144,7 +146,9 @@ export interface ResolvedFinding {
    * verse, ordered by `start_position` (the "x of n" ordinal, W4). Zero-based.
    */
   ordinal: number;
-  /** Stable occurrence identity key: `"{snt_id}|{repeated_word}|{ordinal}"`. */
+  /** Stable occurrence identity key built by `buildOccurrenceKey`
+   * (`snt_id`, NFC-normalized `repeated_word`, and `ordinal` joined by a control
+   * separator that cannot appear in the data). */
   occurrenceKey: string;
   /** Whether the finding is currently active (counts toward the dot). */
   isActive: boolean;

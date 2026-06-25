@@ -7,6 +7,7 @@ import { act, renderHook, waitFor } from '@/test/render';
 
 import { type OccurrenceRules, type ResolvedFinding } from '../checks.types';
 
+import { buildOccurrenceKey } from './useResolvedFindings';
 import {
   deleteRule,
   purgeLocalForPair,
@@ -55,7 +56,7 @@ const makeResolved = (over: Partial<ResolvedFinding> = {}): ResolvedFinding => (
     severity: 0.5,
   },
   ordinal: 0,
-  occurrenceKey: 'JDG 4:3|the the|0',
+  occurrenceKey: buildOccurrenceKey('JDG 4:3', 'the the', 0),
   isActive: false,
   inactiveReason: 'occurrence',
   ...over,
@@ -90,25 +91,43 @@ describe('setRule / deleteRule', () => {
 
 describe('purgeLocalForPair', () => {
   it('drops every occurrence rule whose pair segment matches (NFC), keeps others', () => {
+    const keep = buildOccurrenceKey('JDG 4:3', 'and and', 0);
     const rules: OccurrenceRules = {
-      'JDG 4:3|the the|0': 'suppress',
-      'JDG 4:5|the the|0': 'surface',
-      'JDG 4:3|and and|0': 'suppress',
+      [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'suppress',
+      [buildOccurrenceKey('JDG 4:5', 'the the', 0)]: 'surface',
+      [keep]: 'suppress',
     };
     const { rules: next, changed } = purgeLocalForPair(rules, 'the the');
     expect(changed).toBe(true);
-    expect(next).toEqual({ 'JDG 4:3|and and|0': 'suppress' });
+    expect(next).toEqual({ [keep]: 'suppress' });
   });
 
   it('matches composed vs decomposed accents', () => {
-    const rules: OccurrenceRules = { ['GEN 1:1|cafe\u0301 cafe\u0301|0']: 'suppress' };
+    const rules: OccurrenceRules = {
+      [buildOccurrenceKey('GEN 1:1', 'cafe\u0301 cafe\u0301', 0)]: 'suppress',
+    };
     const { rules: next, changed } = purgeLocalForPair(rules, 'caf\u00e9 caf\u00e9');
     expect(changed).toBe(true);
     expect(next).toEqual({});
   });
 
+  it('regression: purges a pair whose repeated_word contains a pipe', () => {
+    // A verse such as "a | b a | b" yields a repeated_word with a literal '|'.
+    // With the old '|' delimiter the key mis-parsed and the rule was never
+    // purged; the control-character delimiter makes the round-trip exact.
+    const pipePair = 'a | b a | b';
+    const keep = buildOccurrenceKey('JDG 4:3', 'the the', 0);
+    const rules: OccurrenceRules = {
+      [buildOccurrenceKey('JDG 4:3', pipePair, 0)]: 'suppress',
+      [keep]: 'suppress',
+    };
+    const { rules: next, changed } = purgeLocalForPair(rules, pipePair);
+    expect(changed).toBe(true);
+    expect(next).toEqual({ [keep]: 'suppress' });
+  });
+
   it('returns the same instance + changed=false when nothing matches', () => {
-    const rules: OccurrenceRules = { 'JDG 4:3|and and|0': 'suppress' };
+    const rules: OccurrenceRules = { [buildOccurrenceKey('JDG 4:3', 'and and', 0)]: 'suppress' };
     const out = purgeLocalForPair(rules, 'the the');
     expect(out.changed).toBe(false);
     expect(out.rules).toBe(rules);
@@ -162,13 +181,15 @@ describe('useSuppressions — feature-detect probe', () => {
 describe('useSuppressions — occurrence actions', () => {
   it('ignoreHere writes a "suppress" verdict for the key, preserving siblings', async () => {
     const save = vi.fn();
-    const { result } = setup({ 'JDG 4:3|and and|0': 'suppress' }, save);
+    const andKey = buildOccurrenceKey('JDG 4:3', 'and and', 0);
+    const theKey = buildOccurrenceKey('JDG 4:3', 'the the', 0);
+    const { result } = setup({ [andKey]: 'suppress' }, save);
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
 
-    act(() => result.current.ignoreHere('JDG 4:3|the the|0'));
+    act(() => result.current.ignoreHere(theKey));
     expect(save).toHaveBeenCalledWith({
-      'JDG 4:3|and and|0': 'suppress',
-      'JDG 4:3|the the|0': 'suppress',
+      [andKey]: 'suppress',
+      [theKey]: 'suppress',
     });
   });
 
@@ -178,17 +199,18 @@ describe('useSuppressions — occurrence actions', () => {
     // falls back to the lower-layer verdict (legitimate), not overwritten with
     // 'suppress' which would change the inactiveReason and require two undos.
     const save = vi.fn();
-    const { result } = setup({ 'JDG 4:3|the the|0': 'surface' }, save);
+    const theKey = buildOccurrenceKey('JDG 4:3', 'the the', 0);
+    const { result } = setup({ [theKey]: 'surface' }, save);
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
 
-    act(() => result.current.ignoreHere('JDG 4:3|the the|0'));
+    act(() => result.current.ignoreHere(theKey));
     // Should delete the 'surface' key, not write 'suppress' over it.
     expect(save).toHaveBeenCalledWith({});
   });
 
   it('undoOccurrence DELETES the rule when the finding is hidden by its own occurrence rule', async () => {
     const save = vi.fn();
-    const { result } = setup({ 'JDG 4:3|the the|0': 'suppress' }, save);
+    const { result } = setup({ [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'suppress' }, save);
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
 
     act(() => result.current.undoOccurrence(makeResolved({ inactiveReason: 'occurrence' })));
@@ -201,7 +223,7 @@ describe('useSuppressions — occurrence actions', () => {
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
 
     act(() => result.current.undoOccurrence(makeResolved({ inactiveReason: 'global' })));
-    expect(save).toHaveBeenCalledWith({ 'JDG 4:3|the the|0': 'surface' });
+    expect(save).toHaveBeenCalledWith({ [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'surface' });
   });
 
   it('undoOccurrence writes "surface" when the finding is hidden by Greek Room (legitimate)', async () => {
@@ -210,7 +232,7 @@ describe('useSuppressions — occurrence actions', () => {
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
 
     act(() => result.current.undoOccurrence(makeResolved({ inactiveReason: 'legitimate' })));
-    expect(save).toHaveBeenCalledWith({ 'JDG 4:3|the the|0': 'surface' });
+    expect(save).toHaveBeenCalledWith({ [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'surface' });
   });
 });
 
@@ -223,8 +245,9 @@ describe('useSuppressions — global actions', () => {
     mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
     const put = mockPut();
     const save = vi.fn();
+    const andKey = buildOccurrenceKey('JDG 4:3', 'and and', 0);
     const { result } = setup(
-      { 'JDG 4:3|the the|0': 'suppress', 'JDG 4:3|and and|0': 'suppress' },
+      { [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'suppress', [andKey]: 'suppress' },
       save
     );
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
@@ -235,7 +258,7 @@ describe('useSuppressions — global actions', () => {
     expect(result.current.globalRules).toEqual({ 'the the': 'suppress' });
     // Purge-local: the current-chapter occurrence rule for "the the" is dropped,
     // the unrelated "and and" rule stands.
-    expect(save).toHaveBeenCalledWith({ 'JDG 4:3|and and|0': 'suppress' });
+    expect(save).toHaveBeenCalledWith({ [andKey]: 'suppress' });
     // Full-replace PUT carries the whole blob under settings.checkIgnoredWordPairs.
     await waitFor(() =>
       expect(put.body).toEqual({ settings: { checkIgnoredWordPairs: { 'the the': 'suppress' } } })
@@ -333,7 +356,7 @@ describe('useSuppressions — global actions', () => {
     mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
     mockPut();
     const save = vi.fn();
-    const decomposedKey = 'GEN 1:1|cafe\u0301 cafe\u0301|0';
+    const decomposedKey = buildOccurrenceKey('GEN 1:1', 'cafe\u0301 cafe\u0301', 0);
     const { result } = setup({ [decomposedKey]: 'suppress' }, save);
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
 
@@ -351,8 +374,8 @@ describe('useSuppressions — global actions', () => {
 describe('useSuppressions — occurrence rules propagation', () => {
   it('passes through the injected occurrenceRules unchanged in the returned value', async () => {
     const rules: OccurrenceRules = {
-      'JDG 4:3|the the|0': 'suppress',
-      'JDG 4:5|and and|0': 'surface',
+      [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'suppress',
+      [buildOccurrenceKey('JDG 4:5', 'and and', 0)]: 'surface',
     };
     const { result } = setup(rules, vi.fn());
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
@@ -364,7 +387,7 @@ describe('useSuppressions — occurrence rules propagation', () => {
     const { result, rerender } = setup({}, save);
     await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
 
-    const newRules: OccurrenceRules = { 'JDG 4:1|the the|0': 'suppress' };
+    const newRules: OccurrenceRules = { [buildOccurrenceKey('JDG 4:1', 'the the', 0)]: 'suppress' };
     rerender({ occurrenceRules: newRules, saveOccurrenceRules: save });
     expect(result.current.occurrenceRules).toEqual(newRules);
   });

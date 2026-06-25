@@ -10,7 +10,7 @@ import {
   type RuleVerdict,
 } from '../checks.types';
 
-import { normalizePair } from './useResolvedFindings';
+import { normalizePair, occurrenceKeyPair } from './useResolvedFindings';
 
 /**
  * `useSuppressions` — owns the read/write of the two suppression stores that
@@ -144,9 +144,10 @@ export const deleteRule = <T extends Record<string, RuleVerdict>>(rules: T, key:
 /**
  * Remove every occurrence rule that targets `repeatedWord` (NFC-normalized) in
  * the current chapter's occurrence map — used by "purge-local on global write"
- * (§6.5). The occurrence key is `"{snt_id}|{repeated_word}|{ordinal}"`, so we
- * match the normalized middle segment. Returns a new map (or the same instance
- * if nothing matched, to avoid needless writes).
+ * (§6.5). The `repeated_word` segment is recovered via the canonical
+ * {@link occurrenceKeyPair} parser (which knows the key encoding), so a pair
+ * containing the old printable separator no longer mis-parses. Returns a new
+ * map (or the same instance if nothing matched, to avoid needless writes).
  */
 export const purgeLocalForPair = (
   occurrenceRules: OccurrenceRules,
@@ -156,9 +157,7 @@ export const purgeLocalForPair = (
   let changed = false;
   const next: OccurrenceRules = {};
   for (const [key, verdict] of Object.entries(occurrenceRules)) {
-    const segments = key.split('|');
-    // key = snt_id | repeated_word | ordinal  (snt_id has no '|')
-    const pair = segments.length >= 3 ? segments[1] : undefined;
+    const pair = occurrenceKeyPair(key);
     if (pair !== undefined && normalizePair(pair) === target) {
       changed = true;
       continue; // drop it

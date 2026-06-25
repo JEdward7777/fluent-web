@@ -20,7 +20,9 @@ export interface FetchResourceState {
   /**
    * Occurrence-level suppression rules for the Repeated Word Check, scoped to
    * this chapter assignment (cascade layer 2, §7.1). Keyed by occurrence
-   * identity `"{snt_id}|{repeated_word}|{ordinal}"`. Optional +
+   * identity (built by `buildOccurrenceKey` — `snt_id`, NFC-normalized
+   * `repeated_word`, and `ordinal` joined by a control separator that cannot
+   * appear in the data). Optional +
    * backward-compatible: old rows omit it and `useSuppressions` treats it as
    * empty. This blob has a **single writer** (`useSaveResourceState`); the
    * Checks feature reads/updates the map through that one writer rather than

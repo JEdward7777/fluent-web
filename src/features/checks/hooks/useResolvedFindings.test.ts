@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { type GlobalRules, type OccurrenceRules, type RepeatedWordsFinding } from '../checks.types';
 
-import { buildOccurrenceKey, normalizePair, resolveFindings } from './useResolvedFindings';
+import {
+  buildOccurrenceKey,
+  normalizePair,
+  occurrenceKeyPair,
+  OCCURRENCE_KEY_DELIMITER,
+  resolveFindings,
+} from './useResolvedFindings';
 
 /**
  * Factory for a Greek Room finding with sensible defaults. `surf` defaults to a
@@ -34,8 +40,21 @@ describe('normalizePair', () => {
 });
 
 describe('buildOccurrenceKey', () => {
-  it('formats as "{snt_id}|{repeated_word}|{ordinal}" with NFC-normalized pair', () => {
-    expect(buildOccurrenceKey('JDG 4:3', 'the the', 0)).toBe('JDG 4:3|the the|0');
+  it('joins snt_id, NFC-normalized repeated_word, and ordinal with the delimiter', () => {
+    expect(buildOccurrenceKey('JDG 4:3', 'the the', 0)).toBe(
+      `JDG 4:3${OCCURRENCE_KEY_DELIMITER}the the${OCCURRENCE_KEY_DELIMITER}0`
+    );
+  });
+
+  it('round-trips the repeated_word segment through occurrenceKeyPair, even with a pipe', () => {
+    // A verse like "a | b a | b" would yield a repeated_word containing the old
+    // printable '|' separator; the key must still parse back unambiguously.
+    const key = buildOccurrenceKey('JDG 4:3', 'a | b a | b', 0);
+    expect(occurrenceKeyPair(key)).toBe('a | b a | b');
+  });
+
+  it('occurrenceKeyPair returns undefined for a malformed key', () => {
+    expect(occurrenceKeyPair('not-a-key')).toBeUndefined();
   });
 
   it('produces equal keys for composed/decomposed accent variants', () => {
@@ -87,13 +106,13 @@ describe('resolveFindings — global layer (layer 1)', () => {
 
 describe('resolveFindings — occurrence layer (layer 2) precedence', () => {
   it('occurrence suppress beats a silent global (reason "occurrence")', () => {
-    const occ: OccurrenceRules = { 'JDG 4:3|the the|0': 'suppress' };
+    const occ: OccurrenceRules = { [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'suppress' };
     const result = resolveFindings([makeFinding()], occ, NO_GLOBAL);
     expect(result.inactive[0].inactiveReason).toBe('occurrence');
   });
 
   it('occurrence surface overrides a global suppress (most specific wins)', () => {
-    const occ: OccurrenceRules = { 'JDG 4:3|the the|0': 'surface' };
+    const occ: OccurrenceRules = { [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'surface' };
     const global: GlobalRules = { 'the the': 'suppress' };
     const result = resolveFindings([makeFinding()], occ, global);
     expect(result.active).toHaveLength(1);
@@ -101,14 +120,14 @@ describe('resolveFindings — occurrence layer (layer 2) precedence', () => {
   });
 
   it('occurrence suppress overrides a global surface (most specific wins)', () => {
-    const occ: OccurrenceRules = { 'JDG 4:3|the the|0': 'suppress' };
+    const occ: OccurrenceRules = { [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'suppress' };
     const global: GlobalRules = { 'the the': 'surface' };
     const result = resolveFindings([makeFinding({ legitimate: true })], occ, global);
     expect(result.inactive[0].inactiveReason).toBe('occurrence');
   });
 
   it('occurrence surface overrides a Greek-Room-legitimate verdict', () => {
-    const occ: OccurrenceRules = { 'JDG 4:3|the the|0': 'surface' };
+    const occ: OccurrenceRules = { [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'surface' };
     const result = resolveFindings([makeFinding({ legitimate: true })], occ, NO_GLOBAL);
     expect(result.active).toHaveLength(1);
   });
@@ -145,7 +164,9 @@ describe('resolveFindings — full precedence matrix', () => {
   it.each(cases)(
     'occ=$occ global=$global legitimate=$legitimate -> active=$expectActive',
     ({ occ, global, legitimate, expectActive, reason }: Case) => {
-      const occRules: OccurrenceRules = occ ? { 'JDG 4:3|the the|0': occ } : {};
+      const occRules: OccurrenceRules = occ
+        ? { [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: occ }
+        : {};
       const globalRules: GlobalRules = global ? { 'the the': global } : {};
       const result = resolveFindings([makeFinding({ legitimate })], occRules, globalRules);
 
@@ -185,7 +206,11 @@ describe('resolveFindings — ordinal assignment', () => {
     // Each is the first (ordinal 0) of its own (verse, pair) group.
     expect(result.active.every(r => r.ordinal === 0)).toBe(true);
     expect(result.active.map(r => r.occurrenceKey).sort()).toEqual(
-      ['JDG 4:3|and and|0', 'JDG 4:3|the the|0', 'JDG 4:4|the the|0'].sort()
+      [
+        buildOccurrenceKey('JDG 4:3', 'and and', 0),
+        buildOccurrenceKey('JDG 4:3', 'the the', 0),
+        buildOccurrenceKey('JDG 4:4', 'the the', 0),
+      ].sort()
     );
   });
 
@@ -199,13 +224,16 @@ describe('resolveFindings — ordinal assignment', () => {
     const ordinals = result.active.map(r => r.ordinal).sort();
     expect(ordinals).toEqual([0, 1]);
     expect(result.active.map(r => r.occurrenceKey).sort()).toEqual(
-      ['JDG 4:3|the the|0', 'JDG 4:3|the the|1'].sort()
+      [
+        buildOccurrenceKey('JDG 4:3', 'the the', 0),
+        buildOccurrenceKey('JDG 4:3', 'the the', 1),
+      ].sort()
     );
   });
 
   it('allows independently suppressing one occurrence of an overlap', () => {
     const findings = [makeFinding({ start_position: 0 }), makeFinding({ start_position: 4 })];
-    const occ: OccurrenceRules = { 'JDG 4:3|the the|1': 'suppress' };
+    const occ: OccurrenceRules = { [buildOccurrenceKey('JDG 4:3', 'the the', 1)]: 'suppress' };
     const result = resolveFindings(findings, occ, NO_GLOBAL);
     expect(result.active).toHaveLength(1);
     expect(result.active[0].ordinal).toBe(0);
@@ -221,7 +249,7 @@ describe('resolveFindings — output shape', () => {
     const result = resolveFindings([finding], NO_OCCURRENCE, NO_GLOBAL);
     expect(result.active[0].finding).toBe(finding);
     expect(result.active[0]).not.toHaveProperty('inactiveReason');
-    expect(result.active[0].occurrenceKey).toBe('JDG 4:3|the the|0');
+    expect(result.active[0].occurrenceKey).toBe(buildOccurrenceKey('JDG 4:3', 'the the', 0));
   });
 
   it('returns empty buckets for no findings', () => {
@@ -236,15 +264,15 @@ describe('resolveFindings — output shape', () => {
   });
 
   it('includes occurrenceKey on inactive findings', () => {
-    const occ: OccurrenceRules = { 'JDG 4:3|the the|0': 'suppress' };
+    const occ: OccurrenceRules = { [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'suppress' };
     const result = resolveFindings([makeFinding()], occ, NO_GLOBAL);
-    expect(result.inactive[0].occurrenceKey).toBe('JDG 4:3|the the|0');
+    expect(result.inactive[0].occurrenceKey).toBe(buildOccurrenceKey('JDG 4:3', 'the the', 0));
   });
 });
 
 describe('resolveFindings — multi-verse, multi-pair scenarios', () => {
   it('handles findings from multiple verses independently', () => {
-    const occ: OccurrenceRules = { 'JDG 4:3|the the|0': 'suppress' };
+    const occ: OccurrenceRules = { [buildOccurrenceKey('JDG 4:3', 'the the', 0)]: 'suppress' };
     const findings = [
       makeFinding({ snt_id: 'JDG 4:3', repeated_word: 'the the' }),
       makeFinding({ snt_id: 'JDG 4:4', repeated_word: 'the the' }),
@@ -295,8 +323,8 @@ describe('resolveFindings — occurrence key uniqueness', () => {
     const result = resolveFindings(findings, NO_OCCURRENCE, NO_GLOBAL);
     const keys = result.active.map(r => r.occurrenceKey);
     expect(new Set(keys).size).toBe(2); // all unique
-    expect(keys).toContain('JDG 4:3|the the|0');
-    expect(keys).toContain('JDG 4:4|the the|0');
+    expect(keys).toContain(buildOccurrenceKey('JDG 4:3', 'the the', 0));
+    expect(keys).toContain(buildOccurrenceKey('JDG 4:4', 'the the', 0));
   });
 
   it('builds unique occurrence keys for different pairs in the same verse', () => {
@@ -307,7 +335,7 @@ describe('resolveFindings — occurrence key uniqueness', () => {
     const result = resolveFindings(findings, NO_OCCURRENCE, NO_GLOBAL);
     const keys = result.active.map(r => r.occurrenceKey);
     expect(new Set(keys).size).toBe(2);
-    expect(keys).toContain('JDG 4:3|the the|0');
-    expect(keys).toContain('JDG 4:3|and and|0');
+    expect(keys).toContain(buildOccurrenceKey('JDG 4:3', 'the the', 0));
+    expect(keys).toContain(buildOccurrenceKey('JDG 4:3', 'and and', 0));
   });
 });

@@ -43,14 +43,39 @@ import {
 export const normalizePair = (repeatedWord: string): string => repeatedWord.normalize('NFC');
 
 /**
- * Build the stable occurrence-identity key `"{snt_id}|{repeated_word}|{ordinal}"`.
- * The `repeated_word` segment is NFC-normalized so a stored rule matches a fresh
- * finding regardless of composed/decomposed accent representation. The `|`
- * separator cannot appear in a `snt_id`, and `repeated_word` is the final
- * segment-pair, so keys are unambiguous (§7.1).
+ * Delimiter joining the three segments of an occurrence-identity key. We use the
+ * ASCII Unit Separator (`U+001F`) rather than a printable character because the
+ * `repeated_word` segment is derived from arbitrary verse text and is therefore
+ * not guaranteed to avoid any given printable separator (a verse containing
+ * `"a | b"` would yield a `repeated_word` with a literal `|`). `U+001F` is a
+ * control character that cannot occur in a USFM `snt_id`, a numeric ordinal, or
+ * real verse-text-derived `repeated_word`, so the segments stay unambiguous to
+ * split back out (§7.1). Kept as a single source of truth so every producer and
+ * consumer of the key agrees on the encoding.
+ */
+export const OCCURRENCE_KEY_DELIMITER = '\u001f';
+
+/**
+ * Build the stable occurrence-identity key
+ * `"{snt_id}<US>{repeated_word}<US>{ordinal}"` (where `<US>` is
+ * {@link OCCURRENCE_KEY_DELIMITER}). The `repeated_word` segment is
+ * NFC-normalized so a stored rule matches a fresh finding regardless of
+ * composed/decomposed accent representation.
  */
 export const buildOccurrenceKey = (sntId: string, repeatedWord: string, ordinal: number): string =>
-  `${sntId}|${normalizePair(repeatedWord)}|${ordinal}`;
+  `${sntId}${OCCURRENCE_KEY_DELIMITER}${normalizePair(repeatedWord)}${OCCURRENCE_KEY_DELIMITER}${ordinal}`;
+
+/**
+ * Extract the NFC-normalized `repeated_word` segment from an occurrence-identity
+ * key produced by {@link buildOccurrenceKey}, or `undefined` if the string is
+ * not a well-formed key (wrong segment count). This is the single canonical
+ * parser — consumers must not hand-roll the split, so the delimiter choice stays
+ * in exactly one place.
+ */
+export const occurrenceKeyPair = (occurrenceKey: string): string | undefined => {
+  const segments = occurrenceKey.split(OCCURRENCE_KEY_DELIMITER);
+  return segments.length === 3 ? segments[1] : undefined;
+};
 
 /**
  * Assign each finding its ordinal: the index among findings in the **same
@@ -68,7 +93,7 @@ const assignOrdinals = (
   // in start_position order so ordinals are stable against unrelated edits.
   const groups = new Map<string, RepeatedWordsFinding[]>();
   for (const finding of findings) {
-    const groupKey = `${finding.snt_id}|${normalizePair(finding.repeated_word)}`;
+    const groupKey = `${finding.snt_id}${OCCURRENCE_KEY_DELIMITER}${normalizePair(finding.repeated_word)}`;
     const bucket = groups.get(groupKey);
     if (bucket) {
       bucket.push(finding);
