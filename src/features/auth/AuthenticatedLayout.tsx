@@ -4,6 +4,7 @@ import { Outlet, useLocation, useNavigate, useSearch } from '@tanstack/react-rou
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SettingsModal } from '@/components/SettingsModal';
+import { FlagOverrideChip } from '@/features/flags';
 import Header from '@/features/header/components/index';
 import { EditProfile } from '@/features/profile/components/EditProfile';
 import { useAuth } from '@/hooks/useAuth';
@@ -102,6 +103,9 @@ export function AuthenticatedLayout(): React.JSX.Element {
         <Header />
         <main className='flex-1 overflow-hidden p-4'>
           <Outlet />
+          {/* Renders only when a local feature-flag override is active (see
+              features/flags/flagOverrides.ts); otherwise it is `null`. */}
+          <FlagOverrideChip />
           <SettingsModal isOpen={modal === 'settings'} onClose={handleModalClose} />
           <EditProfile isOpen={modal === 'profile'} onClose={handleModalClose} />
         </main>
