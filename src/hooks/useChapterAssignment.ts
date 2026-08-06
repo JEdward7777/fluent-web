@@ -79,11 +79,18 @@ export const useChapterAssignments = (projectId: string) => {
   });
 };
 
-export const useChapterAssignmentsByUserId = (userId: number) => {
+/**
+ * `options.enabled` lets a caller depend on this data only when it actually
+ * needs it — a flag-gated feature must not add a request to pages where the
+ * flag is off. Defaults to enabled so existing callers are unaffected.
+ */
+export const useChapterAssignmentsByUserId = (userId: number, options?: { enabled?: boolean }) => {
+  const enabled = options?.enabled ?? true;
+
   return useQuery<ChapterAssignmentsByUser>({
     queryKey: ['userChapterAssignments', userId],
     queryFn: () => fetchChapterAssignmentsByUserId(userId),
-    enabled: !!userId,
+    enabled: enabled && !!userId,
   });
 };
 
