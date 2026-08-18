@@ -37,6 +37,7 @@ export interface DraftingGridPericopeTts extends Pick<
   SourceTtsPlaybackApi,
   'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'stop'
 > {
+  activeVerseRef: SourceTtsPlaybackApi['activeVerseRef'];
   playGroup: SourceTtsPlaybackApi['playGroup'];
   playFromGroup: SourceTtsPlaybackApi['playFromGroup'];
   isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
@@ -418,6 +419,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
         // playable-item list, so an unplayable verse here costs nothing.
         const ttsGroupRefs = tts ? groupVerses.map(gv => tts.verseRefFor(gv.verseNumber)) : [];
         const isGroupSpeaking = tts?.isGroupSpeaking(ttsGroupRefs) ?? false;
+        // Three cues, deliberately at three strengths so they read as a
+        // hierarchy rather than competing: the row rail + wash say WHICH
+        // PERICOPE, the card tint is a soft supporting field, and this says
+        // WHICH VERSE inside it.
+        const isVerseSpeaking = (verseNumber: number) =>
+          tts !== undefined && tts.verseRefFor(verseNumber) === tts.activeVerseRef;
 
         return (
           <div
@@ -449,7 +456,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 // another is being read aloud (T2). The two states must be
                 // legible at the same time on different cards.
                 className={`focus-visible:ring-primary w-full cursor-pointer rounded-[12px] border-2 p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
-                  isGroupSpeaking ? 'bg-primary/20 dark:bg-primary/30' : 'dark:bg-card bg-[#f0f4f9]'
+                  isGroupSpeaking ? 'bg-primary/10 dark:bg-primary/20' : 'dark:bg-card bg-[#f0f4f9]'
                 } ${isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'}`}
                 role='button'
                 tabIndex={0}
@@ -481,11 +488,25 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                         : (bibleVerseMap.get(v.verseNumber) ?? t('noContentAvailable'));
                     return (
                       <React.Fragment key={v.verseNumber}>
-                        <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
+                        <span
+                          className={`mr-1.5 font-bold ${
+                            isVerseSpeaking(v.verseNumber)
+                              ? 'text-primary'
+                              : 'text-slate-900 dark:text-slate-100'
+                          }`}
+                        >
                           {v.verseNumber}
                         </span>
                         <span
-                          className={`mr-3 ${selectedPanel === 2 && !bibleVerseMap.has(v.verseNumber) ? 'text-muted-foreground text-sm' : ''}`}
+                          // G3a follow-up: the verse being READ, inside a group
+                          // that may hold several. Colour only — deliberately no
+                          // font-weight or padding change, because either would
+                          // re-flow the passage and make the text jiggle every
+                          // time playback advances a verse.
+                          className={`mr-3 ${isVerseSpeaking(v.verseNumber) ? 'bg-primary/30 rounded-sm' : ''} ${selectedPanel === 2 && !bibleVerseMap.has(v.verseNumber) ? 'text-muted-foreground text-sm' : ''}`}
+                          data-testid={
+                            isVerseSpeaking(v.verseNumber) ? 'tts-active-verse' : undefined
+                          }
                         >
                           {textToRender}
                         </span>
