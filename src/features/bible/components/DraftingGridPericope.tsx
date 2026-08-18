@@ -48,6 +48,7 @@ export interface DraftingGridPericopeTts extends Pick<
   'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'stop'
 > {
   playGroup: SourceTtsPlaybackApi['playGroup'];
+  playFromGroup: SourceTtsPlaybackApi['playFromGroup'];
   isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
   verseRefFor: (verseNumber: number) => string;
 }
@@ -230,8 +231,6 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                 (() => {
                   switch (suggestionStatus) {
                     case 'error':
-                      const ttsGroupRefs = tts ? groupVerses.map(gv => tts.verseRefFor(gv.verseNumber)) : [];
-          const isGroupSpeaking = tts?.isGroupSpeaking(ttsGroupRefs) ?? false;
 
           return (
                         <p className='text-destructive mt-1 text-sm font-medium'>
@@ -493,6 +492,8 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             chapters.length === 1 &&
             !refs.some(ref => bibleVerseMap.get(ref.verseNumber)?.trim());
           const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
+          const ttsGroupRefs = tts ? groupVerses.map(gv => tts.verseRefFor(gv.verseNumber)) : [];
+          const isGroupSpeaking = tts?.isGroupSpeaking(ttsGroupRefs) ?? false;
 
           return (
             <div
@@ -517,6 +518,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                       isLoading={ttsGroupRefs.some(ref => tts.isRowLoading(ref))}
                       isPlaying={isGroupSpeaking}
                       showStop={tts.isBusy}
+                      onPlayFromGroup={() => tts.playFromGroup(ttsGroupRefs)}
                       onPlayGroup={() => tts.playGroup(ttsGroupRefs)}
                       onStop={tts.stop}
                     />
