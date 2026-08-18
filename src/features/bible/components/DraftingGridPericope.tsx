@@ -22,6 +22,7 @@ export interface DraftingGridPericopeTts extends Pick<
   'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'stop'
 > {
   playGroup: SourceTtsPlaybackApi['playGroup'];
+  playFromGroup: SourceTtsPlaybackApi['playFromGroup'];
   isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
   verseRefFor: (verseNumber: number) => string;
 }
@@ -292,22 +293,9 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             style={{ gridTemplateColumns: '1fr 1fr' }}
           >
             <div className='flex w-full flex-col space-y-2 px-6'>
-              <div className='flex min-h-10 items-center justify-between gap-2'>
-                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                  {heading}
-                </h4>
-                {tts !== undefined && (
-                  <TtsGroupControls
-                    groupLabel={heading}
-                    hasPlayableText={ttsGroupRefs.some(ref => tts.isRowPlayable(ref))}
-                    isLoading={ttsGroupRefs.some(ref => tts.isRowLoading(ref))}
-                    isPlaying={isGroupSpeaking}
-                    showStop={tts.isBusy}
-                    onPlayGroup={() => tts.playGroup(ttsGroupRefs)}
-                    onStop={tts.stop}
-                  />
-                )}
-              </div>
+              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                {heading}
+              </h4>
               <div
                 // G3a: the playback wash is a BACKGROUND, deliberately not the
                 // border — `border-primary` already means "the caret is in this
@@ -361,15 +349,32 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   })}
                 </p>
               </div>
+              {/*
+               * Controls sit BELOW the card, matching verse mode's reading
+               * order (source text, then its controls) — and deliberately
+               * OUTSIDE it: the card is itself `role='button'`, so nesting real
+               * buttons inside would be invalid ARIA and every play click would
+               * also bubble to the card's caret-move handler.
+               */}
+              {tts !== undefined && (
+                <div className='flex items-center'>
+                  <TtsGroupControls
+                    groupLabel={heading}
+                    hasPlayableText={ttsGroupRefs.some(ref => tts.isRowPlayable(ref))}
+                    isLoading={ttsGroupRefs.some(ref => tts.isRowLoading(ref))}
+                    isPlaying={isGroupSpeaking}
+                    showStop={tts.isBusy}
+                    onPlayFromGroup={() => tts.playFromGroup(ttsGroupRefs)}
+                    onPlayGroup={() => tts.playGroup(ttsGroupRefs)}
+                    onStop={tts.stop}
+                  />
+                </div>
+              )}
             </div>
             <div className='flex w-full flex-col space-y-2 px-6'>
-              {/* min-h-10 mirrors the source heading, which now hosts the TTS
-                  controls — without it the two columns' cards stop lining up. */}
-              <div className='flex min-h-10 items-center'>
-                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                  {heading}
-                </h4>
-              </div>
+              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                {heading}
+              </h4>
               <div
                 className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
                   isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
