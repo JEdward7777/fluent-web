@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
+import { type SourceTtsPlaybackApi, TtsGroupControls } from '@/features/tts';
 import { config } from '@/lib/config';
 import {
   type PericopeGroup,
@@ -21,6 +22,25 @@ const PericopeRteGroup = lazy(() =>
     default: module.PericopeRteGroup,
   }))
 );
+
+/**
+ * Source-TTS wiring for the pericope grid (G3a answer (b)). The unit of
+ * playback here is the GROUP: one control per card reads that pericope and
+ * stops at its end, and the card is washed while any of its verses is playing.
+ *
+ * Deliberately a different prop shape from `DraftingGridVerseTts` — this
+ * surface has no per-row control and no "play from here", so borrowing that
+ * interface would advertise behaviour it does not offer. `verseRefFor` is
+ * shared, keeping row identity a host decision (T3).
+ */
+export interface DraftingGridPericopeTts extends Pick<
+  SourceTtsPlaybackApi,
+  'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'stop'
+> {
+  playGroup: SourceTtsPlaybackApi['playGroup'];
+  isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
+  verseRefFor: (verseNumber: number) => string;
+}
 
 interface DraftingGridPericopeProps {
   pericopes: PericopeGroup[];
@@ -44,6 +64,8 @@ interface DraftingGridPericopeProps {
   isAiThresholdMet: boolean;
   isAiActive: boolean;
   suggestionStatus: SuggestionStatus;
+  /** Undefined when the source-TTS flag is off — the grid renders as before. */
+  tts?: DraftingGridPericopeTts;
 }
 
 interface TargetVersesGroupProps {
@@ -369,6 +391,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   isAiThresholdMet,
   isAiActive,
   suggestionStatus,
+  tts,
 }) => {
   const { t } = useTranslation();
 
@@ -389,6 +412,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
 
         const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
 
+        // G3a: playback state for this card. The refs are the group's rows in
+        // document order; the hook filters them against the page's own
+        // playable-item list, so an unplayable verse here costs nothing.
+        const ttsGroupRefs = tts ? groupVerses.map(gv => tts.verseRefFor(gv.verseNumber)) : [];
+        const isGroupSpeaking = tts?.isGroupSpeaking(ttsGroupRefs) ?? false;
+
         return (
           <div
             key={group.pericopeNumber}
@@ -401,13 +430,32 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             style={{ gridTemplateColumns: '1fr 1fr' }}
           >
             <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                {heading}
-              </h4>
+              <div className='flex min-h-10 items-center justify-between gap-2'>
+                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                  {heading}
+                </h4>
+                {tts !== undefined && (
+                  <TtsGroupControls
+                    groupLabel={heading}
+                    hasPlayableText={ttsGroupRefs.some(ref => tts.isRowPlayable(ref))}
+                    isLoading={ttsGroupRefs.some(ref => tts.isRowLoading(ref))}
+                    isPlaying={isGroupSpeaking}
+                    showStop={tts.isBusy}
+                    onPlayGroup={() => tts.playGroup(ttsGroupRefs)}
+                    onStop={tts.stop}
+                  />
+                )}
+              </div>
               <div
-                className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
-                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
-                }`}
+                // G3a: the playback wash is a BACKGROUND, deliberately not the
+                // border — `border-primary` already means "the caret is in this
+                // group", and a translator can be typing in one pericope while
+                // another is being read aloud (T2). The two states must be
+                // legible at the same time on different cards.
+                className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
+                  isGroupSpeaking ? 'bg-primary/5' : 'bg-[#f0f4f9]'
+                } ${isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'}`}
+                data-testid={isGroupSpeaking ? 'tts-active-group' : undefined}
                 role='button'
                 tabIndex={0}
                 onClick={() => {
@@ -453,9 +501,13 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               </div>
             </div>
             <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                {heading}
-              </h4>
+              {/* min-h-10 mirrors the source heading, which now hosts the TTS
+                  controls — without it the two columns' cards stop lining up. */}
+              <div className='flex min-h-10 items-center'>
+                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                  {heading}
+                </h4>
+              </div>
               <div
                 className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
                   isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
