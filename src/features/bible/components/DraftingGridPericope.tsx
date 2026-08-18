@@ -15,6 +15,7 @@ import {
   pericopeHeading,
 } from '@/features/bible/lib/pericope-display';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
+import { type SourceTtsPlaybackApi, TtsGroupControls } from '@/features/tts';
 import { config } from '@/lib/config';
 import {
   type PericopeGroup,
@@ -31,6 +32,25 @@ const PericopeRteGroup = lazy(() =>
     default: module.PericopeRteGroup,
   }))
 );
+
+/**
+ * Source-TTS wiring for the pericope grid (G3a answer (b)). The unit of
+ * playback here is the GROUP: one control per card reads that pericope and
+ * stops at its end, and the card is washed while any of its verses is playing.
+ *
+ * Deliberately a different prop shape from `DraftingGridVerseTts` — this
+ * surface has no per-row control and no "play from here", so borrowing that
+ * interface would advertise behaviour it does not offer. `verseRefFor` is
+ * shared, keeping row identity a host decision (T3).
+ */
+export interface DraftingGridPericopeTts extends Pick<
+  SourceTtsPlaybackApi,
+  'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'stop'
+> {
+  playGroup: SourceTtsPlaybackApi['playGroup'];
+  isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
+  verseRefFor: (verseNumber: number) => string;
+}
 
 interface DraftingGridPericopeProps {
   fullPericopes?: PericopeGroup[];
@@ -58,6 +78,8 @@ interface DraftingGridPericopeProps {
   isAiThresholdMet: boolean;
   isAiActive: boolean;
   suggestionStatus: SuggestionStatus;
+  /** Undefined when the source-TTS flag is off — the grid renders as before. */
+  tts?: DraftingGridPericopeTts;
 }
 
 interface TargetVersesGroupProps {
@@ -208,7 +230,10 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                 (() => {
                   switch (suggestionStatus) {
                     case 'error':
-                      return (
+                      const ttsGroupRefs = tts ? groupVerses.map(gv => tts.verseRefFor(gv.verseNumber)) : [];
+          const isGroupSpeaking = tts?.isGroupSpeaking(ttsGroupRefs) ?? false;
+
+          return (
                         <p className='text-destructive mt-1 text-sm font-medium'>
                           {t('aiTranslationNotAvailable', 'AI translation not available.')}
                         </p>
@@ -438,6 +463,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   isAiThresholdMet,
   isAiActive,
   suggestionStatus,
+  tts,
 }) => {
   const { t } = useTranslation();
   const displayGroups = useMemo(() => {
@@ -480,9 +506,22 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               style={{ gridTemplateColumns: '1fr 1fr' }}
             >
               <div className='flex w-full flex-col space-y-2 px-6'>
+                <div className='flex min-h-10 items-center justify-between gap-2'>
                 <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
                   {heading}
                 </h4>
+                  {tts !== undefined && (
+                    <TtsGroupControls
+                      groupLabel={heading}
+                      hasPlayableText={ttsGroupRefs.some(ref => tts.isRowPlayable(ref))}
+                      isLoading={ttsGroupRefs.some(ref => tts.isRowLoading(ref))}
+                      isPlaying={isGroupSpeaking}
+                      showStop={tts.isBusy}
+                      onPlayGroup={() => tts.playGroup(ttsGroupRefs)}
+                      onStop={tts.stop}
+                    />
+                  )}
+                </div>
                 {showResourcePlaceholder ? (
                   <div className='bg-muted flex min-h-32 w-full items-center justify-center rounded-lg border-2 p-5'>
                     {resourceBibleLoading ? (
