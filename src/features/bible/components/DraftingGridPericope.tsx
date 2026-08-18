@@ -289,7 +289,15 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 verseRefs.current[gv.verseNumber] = el;
               });
             }}
-            className='grid w-full items-start py-4'
+            // The playback marker mirrors verse mode exactly: a 4px LEFT RAIL on
+            // the whole row, transparent when silent so the grid never shifts.
+            // The rail is the part that reads at a glance — the card wash below
+            // is only a supporting hint, which is why the wash alone was not
+            // enough to show playback leaving one pericope for the next.
+            className={`grid w-full items-start border-l-4 py-4 ${
+              isGroupSpeaking ? 'border-l-primary' : 'border-l-transparent'
+            }`}
+            data-testid={isGroupSpeaking ? 'tts-active-group' : undefined}
             style={{ gridTemplateColumns: '1fr 1fr' }}
           >
             <div className='flex w-full flex-col space-y-2 px-6'>
@@ -302,10 +310,9 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 // group", and a translator can be typing in one pericope while
                 // another is being read aloud (T2). The two states must be
                 // legible at the same time on different cards.
-                className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
-                  isGroupSpeaking ? 'bg-primary/5' : 'bg-[#f0f4f9]'
+                className={`focus-visible:ring-primary w-full cursor-pointer rounded-[12px] border-2 p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
+                  isGroupSpeaking ? 'bg-primary/10 dark:bg-primary/20' : 'dark:bg-card bg-[#f0f4f9]'
                 } ${isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'}`}
-                data-testid={isGroupSpeaking ? 'tts-active-group' : undefined}
                 role='button'
                 tabIndex={0}
                 onClick={() => {
