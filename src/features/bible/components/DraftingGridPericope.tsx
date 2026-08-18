@@ -295,7 +295,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             // is only a supporting hint, which is why the wash alone was not
             // enough to show playback leaving one pericope for the next.
             className={`grid w-full items-start border-l-4 py-4 ${
-              isGroupSpeaking ? 'border-l-primary' : 'border-l-transparent'
+              isGroupSpeaking ? 'border-l-primary bg-primary/5' : 'border-l-transparent'
             }`}
             data-testid={isGroupSpeaking ? 'tts-active-group' : undefined}
             style={{ gridTemplateColumns: '1fr 1fr' }}
@@ -311,7 +311,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 // another is being read aloud (T2). The two states must be
                 // legible at the same time on different cards.
                 className={`focus-visible:ring-primary w-full cursor-pointer rounded-[12px] border-2 p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
-                  isGroupSpeaking ? 'bg-primary/10 dark:bg-primary/20' : 'dark:bg-card bg-[#f0f4f9]'
+                  isGroupSpeaking ? 'bg-primary/20 dark:bg-primary/30' : 'dark:bg-card bg-[#f0f4f9]'
                 } ${isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'}`}
                 role='button'
                 tabIndex={0}
