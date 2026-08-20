@@ -17,6 +17,7 @@ import {
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
 import {
   type SourceTtsPlaybackApi,
+  TTS_CONTROL_ROW_CLASS,
   type TtsServedFormat,
   TtsGroupControls,
   ttsServingWashClass,
