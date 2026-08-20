@@ -15,7 +15,12 @@ import {
   pericopeHeading,
 } from '@/features/bible/lib/pericope-display';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
-import { type SourceTtsPlaybackApi, TtsGroupControls } from '@/features/tts';
+import {
+  type SourceTtsPlaybackApi,
+  type TtsServedFormat,
+  TtsGroupControls,
+  ttsServingWashClass,
+} from '@/features/tts';
 import { config } from '@/lib/config';
 import {
   type PericopeGroup,
@@ -51,6 +56,8 @@ export interface DraftingGridPericopeTts extends Pick<
   playGroup: SourceTtsPlaybackApi['playGroup'];
   playFromGroup: SourceTtsPlaybackApi['playFromGroup'];
   isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
+  /** Present only while verifying a deployment — see `ttsServingWashClass`. */
+  servingFor?: (verseRef: string) => TtsServedFormat | undefined;
   verseRefFor: (verseNumber: number) => string;
 }
 
