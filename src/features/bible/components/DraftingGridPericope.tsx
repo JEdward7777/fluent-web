@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import {
   type SourceTtsPlaybackApi,
+  TTS_CONTROL_ROW_CLASS,
   type TtsServedFormat,
   TtsGroupControls,
   ttsServingWashClass,
@@ -323,7 +324,15 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             data-tts-served={isGroupSpeaking ? groupServed : undefined}
             style={{ gridTemplateColumns: '1fr 1fr' }}
           >
-            <div className='flex w-full flex-col space-y-2 px-6'>
+            {/*
+             * No `space-y-2` here, unlike the target column: a uniform gap
+             * would put the SAME 8px above the control strip as between the
+             * heading and the card, and the strip has to sit visibly tighter
+             * to the card than the card sits to anything else. The heading's
+             * gap is therefore stated once on the card, and the strip owns
+             * its own spacing (`TTS_CONTROL_ROW_CLASS`).
+             */}
+            <div className='flex w-full flex-col px-6'>
               <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
                 {heading}
               </h4>
@@ -333,7 +342,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 // group", and a translator can be typing in one pericope while
                 // another is being read aloud (T2). The two states must be
                 // legible at the same time on different cards.
-                className={`focus-visible:ring-primary w-full cursor-pointer rounded-[12px] border-2 p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
+                className={`focus-visible:ring-primary mt-2 w-full cursor-pointer rounded-[12px] border-2 p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
                   isGroupSpeaking ? 'bg-primary/10 dark:bg-primary/20' : 'dark:bg-card bg-[#f0f4f9]'
                 } ${isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'}`}
                 role='button'
@@ -401,7 +410,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                * also bubble to the card's caret-move handler.
                */}
               {tts !== undefined && (
-                <div className='flex items-center'>
+                <div className={TTS_CONTROL_ROW_CLASS}>
                   <TtsGroupControls
                     groupLabel={heading}
                     hasPlayableText={ttsGroupRefs.some(ref => tts.isRowPlayable(ref))}
