@@ -4,7 +4,12 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
-import { type SourceTtsPlaybackApi, TtsGroupControls } from '@/features/tts';
+import {
+  type SourceTtsPlaybackApi,
+  type TtsServedFormat,
+  TtsGroupControls,
+  ttsServingWashClass,
+} from '@/features/tts';
 import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
 /**
@@ -25,6 +30,8 @@ export interface DraftingGridPericopeTts extends Pick<
   playGroup: SourceTtsPlaybackApi['playGroup'];
   playFromGroup: SourceTtsPlaybackApi['playFromGroup'];
   isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
+  /** Present only while verifying a deployment — see `ttsServingWashClass`. */
+  servingFor?: (verseRef: string) => TtsServedFormat | undefined;
   verseRefFor: (verseNumber: number) => string;
 }
 
@@ -281,6 +288,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
         // playable-item list, so an unplayable verse here costs nothing.
         const ttsGroupRefs = tts ? groupVerses.map(gv => tts.verseRefFor(gv.verseNumber)) : [];
         const isGroupSpeaking = tts?.isGroupSpeaking(ttsGroupRefs) ?? false;
+        // The group's tint follows the verse actually being read inside it —
+        // the group is the control surface, but a clip is per verse.
+        const groupServed =
+          isGroupSpeaking && tts?.activeVerseRef != null
+            ? tts.servingFor?.(tts.activeVerseRef)
+            : undefined;
         // Three cues, deliberately at three strengths so they read as a
         // hierarchy rather than competing: the row rail + wash say WHICH
         // PERICOPE, the card tint is a soft supporting field, and this says
@@ -302,9 +315,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             // is only a supporting hint, which is why the wash alone was not
             // enough to show playback leaving one pericope for the next.
             className={`grid w-full items-start border-l-4 py-4 ${
-              isGroupSpeaking ? 'border-l-primary bg-primary/5' : 'border-l-transparent'
+              isGroupSpeaking
+                ? (ttsServingWashClass(groupServed) ?? 'border-l-primary bg-primary/5')
+                : 'border-l-transparent'
             }`}
             data-testid={isGroupSpeaking ? 'tts-active-group' : undefined}
+            data-tts-served={isGroupSpeaking ? groupServed : undefined}
             style={{ gridTemplateColumns: '1fr 1fr' }}
           >
             <div className='flex w-full flex-col space-y-2 px-6'>
