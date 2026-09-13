@@ -1,8 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { type ReactNode } from 'react';
+
+import { render as renderUi, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
+import { PlaybackRegistryProvider } from '@/features/tts';
 import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
@@ -15,6 +18,8 @@ import {
 import { useAppStore } from '@/store/store';
 
 import type * as ReactRouter from '@tanstack/react-router';
+
+const render = (ui: ReactNode) => renderUi(ui, { wrapper: PlaybackRegistryProvider });
 
 // Mock TanStack Router
 const { mockNavigate, mockBack, mockUseLocation } = vi.hoisted(() => ({

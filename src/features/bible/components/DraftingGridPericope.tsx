@@ -41,7 +41,7 @@ const PericopeRteGroup = lazy(() =>
  */
 export interface DraftingGridPericopeTts extends Pick<
   SourceTtsPlaybackApi,
-  'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'stop'
+  'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'pause' | 'stop'
 > {
   activeVerseRef: SourceTtsPlaybackApi['activeVerseRef'];
   playGroup: SourceTtsPlaybackApi['playGroup'];
@@ -555,6 +555,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                     isLoading={ttsGroupRefs.some(ref => tts.isRowLoading(ref))}
                     isPlaying={isGroupSpeaking}
                     showStop={tts.isBusy}
+                    onPause={tts.pause}
                     onPlayFromGroup={() => tts.playFromGroup(ttsGroupRefs)}
                     onPlayGroup={() => tts.playGroup(ttsGroupRefs)}
                     onStop={tts.stop}
