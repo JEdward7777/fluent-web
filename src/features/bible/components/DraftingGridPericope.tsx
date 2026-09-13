@@ -7,9 +7,8 @@ import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
 import {
   type SourceTtsPlaybackApi,
-  TTS_CONTROL_ROW_CLASS,
   type TtsServedFormat,
-  TtsGroupControls,
+  PericopePlayer,
   ttsServingWashClass,
 } from '@/features/tts';
 import { config } from '@/lib/config';
@@ -41,7 +40,7 @@ const PericopeRteGroup = lazy(() =>
  */
 export interface DraftingGridPericopeTts extends Pick<
   SourceTtsPlaybackApi,
-  'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'pause' | 'stop'
+  'status' | 'groupView' | 'playGroup' | 'restartGroup' | 'seekGroup'
 > {
   activeVerseRef: SourceTtsPlaybackApi['activeVerseRef'];
   playGroup: SourceTtsPlaybackApi['playGroup'];
@@ -462,18 +461,16 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             data-tts-served={isGroupSpeaking ? groupServed : undefined}
             style={{ gridTemplateColumns: '1fr 1fr' }}
           >
-            {/*
-             * No `space-y-2` here, unlike the target column: a uniform gap
-             * would put the SAME 8px above the control strip as between the
-             * heading and the card, and the strip has to sit visibly tighter
-             * to the card than the card sits to anything else. The heading's
-             * gap is therefore stated once on the card, and the strip owns
-             * its own spacing (`TTS_CONTROL_ROW_CLASS`).
-             */}
-            <div className='flex w-full flex-col px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                {heading}
-              </h4>
+            <div className='flex w-full min-w-0 flex-col px-6' data-testid='pericope-source-column'>
+              {/* Outside the clickable card, beside the reference, source width only. */}
+              <div className='flex h-6 min-w-0 items-center gap-2'>
+                <h4 className='shrink-0 text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                  {heading}
+                </h4>
+                {tts !== undefined && (
+                  <PericopePlayer groupLabel={heading} playback={tts} verseRefs={ttsGroupRefs} />
+                )}
+              </div>
               <div
                 // G3a: the playback wash is a BACKGROUND, deliberately not the
                 // border — `border-primary` already means "the caret is in this
@@ -540,28 +537,6 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   })}
                 </p>
               </div>
-              {/*
-               * Controls sit BELOW the card, matching verse mode's reading
-               * order (source text, then its controls) — and deliberately
-               * OUTSIDE it: the card is itself `role='button'`, so nesting real
-               * buttons inside would be invalid ARIA and every play click would
-               * also bubble to the card's caret-move handler.
-               */}
-              {tts !== undefined && (
-                <div className={TTS_CONTROL_ROW_CLASS}>
-                  <TtsGroupControls
-                    groupLabel={heading}
-                    hasPlayableText={ttsGroupRefs.some(ref => tts.isRowPlayable(ref))}
-                    isLoading={ttsGroupRefs.some(ref => tts.isRowLoading(ref))}
-                    isPlaying={isGroupSpeaking}
-                    showStop={tts.isBusy}
-                    onPause={tts.pause}
-                    onPlayFromGroup={() => tts.playFromGroup(ttsGroupRefs)}
-                    onPlayGroup={() => tts.playGroup(ttsGroupRefs)}
-                    onStop={tts.stop}
-                  />
-                </div>
-              )}
             </div>
             <div className='flex w-full flex-col space-y-2 px-6'>
               <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
