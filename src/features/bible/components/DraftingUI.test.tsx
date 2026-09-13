@@ -1,13 +1,16 @@
 import { type ComponentProps } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render as renderUi, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode } from 'react';
+
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import type * as ResourcePanelModule from '@/features/resources/components/ResourcePanel';
+import { PlaybackRegistryProvider } from '@/features/tts';
 import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
@@ -21,6 +24,8 @@ import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
 
 import type * as ReactRouter from '@tanstack/react-router';
+
+const render = (ui: ReactNode) => renderUi(ui, { wrapper: PlaybackRegistryProvider });
 
 // Mock TanStack Router
 const { mockNavigate, mockBack, mockUseLocation } = vi.hoisted(() => ({
