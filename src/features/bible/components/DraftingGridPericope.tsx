@@ -17,9 +17,8 @@ import {
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
 import {
   type SourceTtsPlaybackApi,
-  TTS_CONTROL_ROW_CLASS,
   type TtsServedFormat,
-  TtsGroupControls,
+  PericopePlayer,
   ttsServingWashClass,
 } from '@/features/tts';
 import { config } from '@/lib/config';
@@ -51,7 +50,7 @@ const PericopeRteGroup = lazy(() =>
  */
 export interface DraftingGridPericopeTts extends Pick<
   SourceTtsPlaybackApi,
-  'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'pause' | 'stop'
+  'status' | 'groupView' | 'playGroup' | 'restartGroup' | 'seekGroup'
 > {
   activeVerseRef: SourceTtsPlaybackApi['activeVerseRef'];
   playGroup: SourceTtsPlaybackApi['playGroup'];
