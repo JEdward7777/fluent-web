@@ -17,6 +17,7 @@ interface DraftingResourceSidebarProps {
   currentResource: ResourceName;
   clearBibleRef: React.MutableRefObject<(() => void) | null>;
   setBibleTabLabel: (label: string) => void;
+  setReferenceBibleId: (id: string) => void;
   setOpenResourcePanel: (open: boolean) => void;
   setSelectedPanel: (panel: 1 | 2) => void;
   setBibleContentLoading: (loading: boolean) => void;
@@ -47,6 +48,7 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
   currentResource,
   clearBibleRef,
   setBibleTabLabel,
+  setReferenceBibleId,
   setOpenResourcePanel,
   setSelectedPanel,
   setBibleContentLoading,
@@ -138,6 +140,7 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
               resourceNames={resourceNames}
               selectPanel={panel => setSelectedPanel(panel as 1 | 2)}
               sourceData={projectItem}
+              onBibleIdentityChange={setReferenceBibleId}
               onBibleLoadingChange={setBibleContentLoading}
               onBibleVersesChange={setBibleVerses}
               onLanguageChange={setCurrentLanguage}

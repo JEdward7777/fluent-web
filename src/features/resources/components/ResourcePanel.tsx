@@ -27,6 +27,8 @@ interface ResourcePanelProps {
   onResourceChange?: (resource: ResourceName) => void;
   onLanguageChange?: (language: string) => void;
   onBibleVersesChange?: (verses: BibleVerse[]) => void;
+  /** Existing domain-qualified selection id (aq-… / yv-…), not an audio provider choice. */
+  onBibleIdentityChange?: (id: string) => void;
   onBibleLoadingChange?: (loading: boolean) => void;
   openResourceBiblePanel?: (open: boolean) => void;
   selectPanel?: (panel: number) => void;
@@ -43,6 +45,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   onResourceChange,
   onLanguageChange,
   onBibleVersesChange,
+  onBibleIdentityChange,
   onBibleLoadingChange,
   openResourceBiblePanel,
   selectPanel,
@@ -213,11 +216,18 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   const handleBibleSelect = useCallback(
     (bible: UnifiedBible) => {
       handleBibleChange(bible.id);
+      onBibleIdentityChange?.(bible.id);
       openResourceBiblePanel?.(true);
       selectPanel?.(2);
       bibleResourceName(bible.abbreviation);
     },
-    [handleBibleChange, openResourceBiblePanel, selectPanel, bibleResourceName]
+    [
+      handleBibleChange,
+      onBibleIdentityChange,
+      openResourceBiblePanel,
+      selectPanel,
+      bibleResourceName,
+    ]
   );
 
   const handleAccordionChange = async (value: string[]) => {
