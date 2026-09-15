@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 
+import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import {
   type PericopePlaybackView,
@@ -20,7 +24,7 @@ export interface PericopePlayerProps {
   verseRefs: readonly string[];
   playback: Pick<
     SourceTtsPlaybackApi,
-    'status' | 'groupView' | 'playGroup' | 'restartGroup' | 'seekGroup'
+    'status' | 'groupView' | 'playGroup' | 'restartGroup' | 'seekGroup' | 'showAttribution'
   >;
 }
 
@@ -112,6 +116,24 @@ export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlay
         }}
       />
       <TimeReadout elapsed={geometry.elapsed} estimated={geometry.estimated} />
+      {view.attribution?.notice.trim() && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={t('ttsAttributionInfo', 'Audio source information for {{groupLabel}}', { groupLabel })}
+                className='text-muted-foreground size-10 shrink-0'
+                size='icon'
+                variant='ghost'
+                onClick={() => { if (view.attribution) playback.showAttribution(view.attribution); }}
+              >
+                <Info aria-hidden='true' className='size-4' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('ttsAttributionTitle', 'Audio sources & licences')}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }

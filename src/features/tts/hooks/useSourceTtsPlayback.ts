@@ -18,6 +18,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
+import { type AudioAttribution } from '../lib/ackStore';
 import { isPlayableRow } from '../lib/buildTtsQueueItems';
 import { pressPrimary, pressRestart, unavailableReason } from '../lib/controlActions';
 import { createTtsSegment } from '../lib/createTtsSegment';
@@ -47,6 +48,7 @@ import { type Playable, type Segment } from '../seam/types';
 import { RecordedRecoveryStrategy } from '../strategies/recordedRecoveryStrategy';
 import { type TtsEngine, type TtsServedFormat } from '../tts.types';
 
+import { useAudioAttribution } from './useAudioAttribution';
 import { usePlaybackTiming } from './usePlaybackTiming';
 import { type TtsPlaybackStatus, useTtsPlaybackQueue } from './useTtsPlaybackQueue';
 
@@ -64,6 +66,8 @@ export interface UseSourceTtsPlaybackOptions {
   sourceLicence?: {
     status?: 'allowed' | 'forbidden' | 'unknown';
     notice?: string | null;
+    /** Text Bible name from the same assignment, not the independently resolved recording. */
+    name?: string;
   };
   /** Domain-qualified reference selection identity; never used to select an audio provider. */
   referenceBibleId: string | null;
@@ -108,10 +112,14 @@ export interface PericopePlaybackView {
   /** Segment-local seconds: components never inspect a media window. */
   currentTime: number;
   pendingFraction?: number;
+  attribution?: AudioAttribution | null;
 }
 
 export interface SourceTtsPlaybackApi {
   status: TtsPlaybackStatus;
+  attributionDialog: AudioAttribution | null;
+  closeAttribution: () => void;
+  showAttribution: (pair: AudioAttribution) => void;
   /** Live-run badge channel; idle controls read the registry instead. */
   aiMarkedKeys: ReadonlySet<string>;
   activeVerseRef: string | null;
@@ -181,6 +189,13 @@ export const useSourceTtsPlayback = (
     enabled = true,
   } = options;
   const licenceStatus = sourceLicence?.status;
+  const attribution = useAudioAttribution({
+    pageKey,
+    textSourceId: sourceChapter?.bibleId,
+    textSourceName: sourceLicence?.name,
+    notice: sourceLicence?.notice,
+    enabled,
+  });
   const { t } = useTranslation();
   const registry = usePlaybackRegistry();
   const offline = useOffline();
@@ -199,6 +214,7 @@ export const useSourceTtsPlayback = (
     sourceChapter,
     licenceStatus,
     referenceBibleId,
+    onSourceResolved: attribution.remember,
   });
   latest.current = {
     getRowElement,
@@ -208,6 +224,7 @@ export const useSourceTtsPlayback = (
     sourceChapter,
     licenceStatus,
     referenceBibleId,
+    onSourceResolved: attribution.remember,
   };
   const [cache] = useState(() => new ChapterAudioCache());
   const [itemServing, setItemServing] = useState<Record<string, TtsServedFormat>>({});
@@ -219,6 +236,7 @@ export const useSourceTtsPlayback = (
         sourceChapter: chapter,
         licenceStatus: currentLicence,
         referenceBibleId: referenceId,
+        onSourceResolved,
       } = latest.current;
       const construction = {
         engine: currentEngine,
@@ -233,6 +251,7 @@ export const useSourceTtsPlayback = (
           cache,
           recordedRecovery: RecordedRecoveryStrategy,
           pericopeId,
+          onSourceResolved,
           // The assignment's answer first; a held response only fills in for an
           // API that does not carry the licence on the assignment yet.
           ttsLicenseStatus: currentLicence ?? cache.peek(chapter)?.ttsLicenseStatus,
@@ -428,6 +447,15 @@ export const useSourceTtsPlayback = (
     onRunComplete: () => finishRun(true),
     onScrollRequest: handleScrollRequest,
   });
+
+  // `playing` is the native first-sound signal. Prefetch and press only remember
+  // source facts. Re-evaluate at same-element verse boundaries and recovery too.
+  const { forSegment, offer } = attribution;
+  const sounding = timing.report?.items[timing.report.index];
+  useEffect(() => {
+    if (queue.status !== 'playing' || !sounding || queue.activeVerseRef !== sounding.verseRef) return;
+    offer(forSegment(sounding.playableKey, sounding.verseRef));
+  }, [forSegment, offer, queue.activeVerseRef, queue.status, sounding, timing.report]);
 
   const queueRef = useRef(queue);
   queueRef.current = queue;
@@ -760,9 +788,15 @@ export const useSourceTtsPlayback = (
         currentIndex,
         currentTime,
         pendingFraction: isLive ? report?.pendingFraction : undefined,
+        // Only an actually resolved pair is advertised. A cold player never
+        // guesses the recording or fetches availability just for its Info icon.
+        attribution: descriptors[currentIndex]
+          ? forSegment(descriptors[currentIndex].playableKey, descriptors[currentIndex].verseRef)
+          : null,
       };
     },
     [
+      forSegment,
       groupPlayable,
       knownImpossibleReason,
       liveGroupKey,
@@ -878,6 +912,9 @@ export const useSourceTtsPlayback = (
 
   return {
     status: queue.status,
+    attributionDialog: attribution.dialog,
+    closeAttribution: attribution.close,
+    showAttribution: pair => attribution.offer(pair, true),
     aiMarkedKeys: queue.aiMarkedKeys,
     activeVerseRef: queue.activeVerseRef,
     isBusy: queue.status !== 'idle',

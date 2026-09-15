@@ -30,6 +30,7 @@ import {
   ServerTtsEngine,
   type SourceAudioRow,
   usePlaybackRegistry,
+  AttributionDialog,
   useSourceTtsPlayback,
   useTtsKeyboardShortcuts,
 } from '@/features/tts';
@@ -716,7 +717,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     // by one being unreachable.
     sourceLicence: {
       status: projectItem.ttsLicenseStatus,
-      notice: projectItem.licenseNotice ?? null,
+      notice: projectItem.licenseNotice,
+      name: projectItem.bibleName,
     },
     // The reference panel has provider-specific ids, not this Fluent Bible id.
     // Keep its own-text TTS path until reference recording identity is wired.
@@ -1015,6 +1017,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   return (
     <div className='flex h-full flex-col overflow-hidden'>
+      <AttributionDialog attribution={tts.attributionDialog} onClose={tts.closeAttribution} />
       <DraftingHeader
         activeFindingsCount={activeFindingsCount}
         buttonText={buttonText}

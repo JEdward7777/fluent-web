@@ -40,6 +40,7 @@ const props = (view = model()): PericopePlayerProps => ({
   verseRefs: ['1', '2'],
   playback: {
     status: 'idle',
+    showAttribution: vi.fn(),
     groupView: () => view,
     playGroup: vi.fn(),
     restartGroup: vi.fn(),

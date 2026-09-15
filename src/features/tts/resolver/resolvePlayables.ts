@@ -21,6 +21,8 @@ export interface RecordedRecoveryOptions {
   verseNumber: number;
   /** Null when synthesis is barred; the licence fence supplies that decision. */
   ttsSource: SourceThunk | null;
+  /** L2 provenance observation, including a healed recording; never a player instruction. */
+  onRecordedSourceResolved?: (response: ChapterSourceAudio) => void;
 }
 
 export interface SourceResolverContext
@@ -38,6 +40,13 @@ export interface SourceResolverContext
    */
   ttsLicenseStatus?: ChapterSourceAudio['ttsLicenseStatus'];
   licenseNotice?: ChapterSourceAudio['licenseNotice'];
+  /** Actual source choice, not the sticky AI badge. Null response means TTS. */
+  onSourceResolved?: (
+    key: string,
+    verseRef: string,
+    response: ChapterSourceAudio | null,
+    fallbackNotice?: string | null
+  ) => void;
 }
 
 /**
@@ -78,10 +87,15 @@ export const resolvePlayables = (
             },
             { ...ctx, playableKey: key }
           );
-          const ttsSource: SourceThunk = resolution => {
+          const rememberRecording = (response: ChapterSourceAudio) =>
+            ctx.onSourceResolved?.(key, row.verseRef, response);
+          const ttsSource: SourceThunk = async resolution => {
             resolution.signal.throwIfAborted();
             if (!tts.text) throw new Error(`No source text for verse ${row.verseRef}`);
-            return tts.source(resolution);
+            const source = await tts.source(resolution);
+            resolution.signal.throwIfAborted();
+            ctx.onSourceResolved?.(key, row.verseRef, null, ctx.cache.peek(chapter)?.licenseNotice);
+            return source;
           };
           return {
             ...tts,
@@ -123,8 +137,10 @@ export const resolvePlayables = (
                     // Barred audio hands off to nothing: an exhausted recording
                     // ends the run rather than reaching for a voice.
                     ttsSource: barred === null ? ttsSource : null,
+                    onRecordedSourceResolved: rememberRecording,
                   })
                 );
+                rememberRecording(response!);
                 return source;
               }
               if (barred !== null) {

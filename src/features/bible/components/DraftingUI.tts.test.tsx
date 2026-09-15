@@ -252,6 +252,9 @@ vi.mock('@/features/tts', async importOriginal => {
       );
       return {
         status: isBusy ? 'playing' : 'idle',
+        attributionDialog: null,
+        closeAttribution: vi.fn(),
+        showAttribution: vi.fn(),
         aiMarkedKeys: new Set<string>(),
         activeVerseRef,
         isBusy,

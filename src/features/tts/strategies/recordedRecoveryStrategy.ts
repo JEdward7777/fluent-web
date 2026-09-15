@@ -71,6 +71,7 @@ export class RecordedRecoveryStrategy implements RecoveryStrategy {
             // HTTP failure still earns the bounded reload: the host responded.
             // A rejected fetch instead means this path is unreachable.
           }
+          this.options.onRecordedSourceResolved?.(response);
           return source;
         } catch (error) {
           this.fallBack(requests, signal);

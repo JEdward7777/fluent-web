@@ -64,6 +64,7 @@ export {
 export { SourceVerseControl } from './components/SourceVerseControl';
 
 export { PericopePlayer, type PericopePlayerProps } from './components/TtsGroupControls';
+export { AttributionDialog } from './components/AttributionDialog';
 
 export {
   buildTtsQueueItems,
