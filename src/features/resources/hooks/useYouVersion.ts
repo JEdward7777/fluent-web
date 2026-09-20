@@ -68,7 +68,7 @@ const fetchYouVersionBibles = async (languageTag: string): Promise<YouVersionBib
   return json.data;
 };
 
-const fetchYouVersionChapterMeta = async (
+export const fetchYouVersionChapterMeta = async (
   bibleId: number,
   bookId: string,
   chapterId: number
@@ -97,7 +97,7 @@ const fetchYouVersionChapterMeta = async (
   return (await response.json()) as YouVersionChapterResponse;
 };
 
-const fetchYouVersionPassage = async (
+export const fetchYouVersionPassage = async (
   bibleId: number,
   passageId: string
 ): Promise<YouVersionPassageResponse> => {
