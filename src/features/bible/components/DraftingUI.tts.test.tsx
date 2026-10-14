@@ -162,6 +162,7 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
     moveToNextVerse: vi.fn(),
     revealNextVerse: vi.fn(),
     updateButtonPosition: vi.fn(),
+    resizeAndPosition: vi.fn(),
   }),
 }));
 
@@ -1975,6 +1976,13 @@ describe('DraftingUI — the serving tint', () => {
 });
 
 vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () => undefined }));
+// These suites test audio in Chapter view, not its availability gate (#507), and the mock
+// chapter has empty verses. Treat it as complete so a 'chapter' displayMode really opens it,
+// keeping the real hook's RTE flag gate.
+vi.mock('@/features/bible/hooks/useChapterViewAvailability', async () => {
+  const { config } = await import('@/lib/config');
+  return { useChapterViewAvailability: () => config.features.rtePericope };
+});
 const mockReferenceChapters = new Map<
   number,
   { texts: Map<number, string>; loading: boolean; error: boolean }
