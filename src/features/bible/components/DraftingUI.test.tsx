@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useState } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render as renderUi, screen, waitFor, within } from '@testing-library/react';
@@ -22,10 +22,20 @@ import {
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
+import { createTestQueryClient } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
 
-const render = (ui: ReactNode) => renderUi(ui, { wrapper: PlaybackRegistryProvider });
+function TestProviders({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(createTestQueryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <PlaybackRegistryProvider>{children}</PlaybackRegistryProvider>
+    </QueryClientProvider>
+  );
+}
+
+const render = (ui: ReactNode) => renderUi(ui, { wrapper: TestProviders });
 
 // Mock TanStack Router
 const { mockNavigate, mockBack, mockUseLocation } = vi.hoisted(() => ({
@@ -48,6 +58,30 @@ vi.mock('@tanstack/react-router', async importOriginal => {
     }),
   };
 });
+
+// i18n is mocked so accessible names are the inline defaults with interpolated tokens.
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (
+      key: string,
+      defaultOrOptions?: string | Record<string, unknown>,
+      maybeOptions?: Record<string, unknown>
+    ) => {
+      const opts =
+        (typeof defaultOrOptions === 'object' && defaultOrOptions !== null
+          ? defaultOrOptions
+          : maybeOptions) ?? {};
+      const template =
+        typeof defaultOrOptions === 'string'
+          ? defaultOrOptions
+          : typeof opts.defaultValue === 'string'
+            ? opts.defaultValue
+            : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => String(opts[name] ?? ''));
+    },
+    i18n: { language: 'en', changeLanguage: vi.fn() },
+  }),
+}));
 
 // Mock hooks
 const mockUseAddTranslatedVerse = vi.fn();
@@ -982,8 +1016,8 @@ describe('DraftingUI', () => {
       />
     );
 
-    // Find submit button in header (which is labeled with "Send to Peer Checking")
-    const submitBtn = screen.getByRole('button', { name: /Send to Peer Checking/i });
+    // Find submit button in header (which is labeled with "Send to Peer Check")
+    const submitBtn = screen.getByRole('button', { name: 'Send to Peer Check' });
     expect(submitBtn).toBeEnabled();
 
     await user.click(submitBtn);
