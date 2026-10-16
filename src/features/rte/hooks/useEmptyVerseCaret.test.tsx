@@ -87,6 +87,22 @@ describe('clicking into an empty verse', () => {
     expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(1)) });
   });
 
+  it('follows reading order in a right-to-left paragraph', async () => {
+    const { verse, paragraph } = await renderEditor();
+    // jsdom cannot resolve dir=auto; supply the direction a browser resolves for Arabic text.
+    paragraph.style.direction = 'rtl';
+    [verse(1), verse(2), verse(3)].forEach((marker, index) => {
+      const right = 100 - index * 20;
+      marker.getBoundingClientRect = () =>
+        ({ left: right - 10, right, top: 0, bottom: 20, width: 10, height: 20 }) as DOMRect;
+    });
+
+    // Left of verse 1's number, which in RTL is just after it.
+    fireEvent.click(paragraph, { clientX: 85, clientY: 10 });
+
+    expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(1)) });
+  });
+
   it('leaves a click on a verse with words to the browser', async () => {
     const { verse, paragraph } = await renderEditor();
     layOut([verse(1), verse(2), verse(3)]);
