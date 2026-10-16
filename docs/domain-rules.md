@@ -83,6 +83,13 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   `src/features/rte/hooks/useVerseNumberKeys.test.tsx` › "brings the verse number in with the
   first letter"; `src/features/rte/lib/pericope-usj.test.ts` › "starts the next verse with words
   typed in a new paragraph under a heading".
+- Pericope View builds one document per pericope, but it must not add structure the chapter
+  doesn't have. When a pericope's first verse opens no paragraph of its own, it continues the one
+  the chapter has open there (`openParagraphAfter`, passed as `continuedParagraph`), so a Poetry
+  line stays Poetry across the boxes, and editing that verse doesn't save a new paragraph.
+  Tests: `src/features/rte/lib/pericope-usj.test.ts` › "does not save the continued paragraph as
+  a break before the first verse"; `src/features/bible/components/PericopeRteGroup.test.tsx` ›
+  "tells the editor which paragraph the pericope continues".
 - A verse saves as plain text plus `markers.paragraphs` and `markers.headings`. Words inside
   character markers become plain verse text, and footnotes stay out of it. Tests:
   `src/features/rte/lib/pericope-usj.test.ts` › "leaves a footnote out of the verse row".
