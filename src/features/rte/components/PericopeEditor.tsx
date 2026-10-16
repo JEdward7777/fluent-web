@@ -6,6 +6,7 @@ import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
+import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { headingErrorIn, type HeadingError } from '../lib/heading-markers';
@@ -157,6 +158,7 @@ export function PericopeEditor({
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
+  const verseKeys = useVerseNumberKeys(editorRef, readOnly);
 
   return (
     <div
@@ -165,9 +167,12 @@ export function PericopeEditor({
       data-testid='pericope-editor'
       onContextMenuCapture={handleEditorContextMenu}
       onKeyDownCapture={event => {
-        if (!handleHeadingEnter(event)) handleEditorKeys(event);
+        if (!handleHeadingEnter(event) && !verseKeys.handleKeyDown(event)) handleEditorKeys(event);
       }}
-      onPasteCapture={handleEditorPaste}
+      onPasteCapture={event => {
+        verseKeys.handlePaste(event);
+        handleEditorPaste(event);
+      }}
     >
       <HeadingValidationMessage error={headingError} />
       <Editorial
