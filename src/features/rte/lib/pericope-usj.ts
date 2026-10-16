@@ -122,12 +122,15 @@ interface VerseSegment {
  * Segments are trimmed (canonical USJ carries a structural space before the next verse marker
  * that is not part of the verse's own text), so offsets are positions in the exact string that is
  * saved. A paragraph holding no text is not persisted — there is no character to anchor it to.
+ * Words in a paragraph that no verse owns yet (under a heading, or above the chapter's first
+ * verse) open the verse that follows, rather than being dropped.
  */
 export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
   const order: number[] = [];
   const segments = new Map<number, VerseSegment[]>();
   const headings = new Map<number, VerseHeading[]>();
   let pendingHeadings: VerseHeading[] = [];
+  let pendingSegments: VerseSegment[] = [];
   let currentVerse: number | undefined;
 
   for (const node of usj.content) {
@@ -190,10 +193,16 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
           segments.set(currentVerse, []);
           order.push(currentVerse);
         }
+        segments.get(currentVerse)?.push(...pendingSegments);
+        pendingSegments = [];
         continue;
       }
       // Character-level markers (\nd, \add …) contribute their text to the verse.
       if (!NON_TEXT_MARKER_TYPES.has(item.type)) buffer += markerText(item);
+    }
+    // Words with no verse yet wait for the next one, which they open.
+    if (currentVerse === undefined && buffer.trim() !== '') {
+      pendingSegments.push({ text: buffer.trim(), paraMarker, openedByVerse: true });
     }
     flush();
   }

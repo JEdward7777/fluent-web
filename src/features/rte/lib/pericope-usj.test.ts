@@ -358,6 +358,107 @@ describe('paragraph markers', () => {
     });
   });
 
+  it('starts the next verse with words typed in a new paragraph under a heading', () => {
+    // The paragraph Enter opens under a heading holds no verse marker. No earlier verse in the
+    // section can own its words, so they open the verse below instead of being dropped.
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        { type: 'chapter', marker: 'c', number: '3' },
+        { type: 'para', marker: 's1', content: ['Title'] },
+        { type: 'para', marker: 'p', content: ['Typed above.  '] },
+        {
+          type: 'para',
+          marker: 'q1',
+          content: [{ type: 'verse', marker: 'v', number: '1' }, 'First verse.'],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)).toEqual([
+      {
+        verseNumber: 1,
+        text: 'Typed above. First verse.',
+        markers: {
+          paragraphs: [
+            { marker: 'p', offset: 0 },
+            { marker: 'q1', offset: 13 },
+          ],
+          headings: [{ marker: 's1', text: 'Title' }],
+        },
+      },
+    ]);
+  });
+
+  it('starts the first verse with words typed above it at the top of the chapter', () => {
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        { type: 'chapter', marker: 'c', number: '3' },
+        { type: 'para', marker: 'p', content: ['Before the first verse.'] },
+        { type: 'para', marker: 'p', content: ['   '] },
+        {
+          type: 'para',
+          marker: 'p',
+          content: [{ type: 'verse', marker: 'v', number: '1' }, 'First verse.'],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)).toEqual([
+      {
+        verseNumber: 1,
+        text: 'Before the first verse. First verse.',
+        markers: {
+          paragraphs: [
+            { marker: 'p', offset: 0 },
+            { marker: 'p', offset: 24 },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('still continues the verse above with words in a paragraph between two verses', () => {
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        {
+          type: 'para',
+          marker: 'p',
+          content: [{ type: 'verse', marker: 'v', number: '1' }, 'First verse.'],
+        },
+        { type: 'para', marker: 'p', content: ['More of the first.'] },
+        {
+          type: 'para',
+          marker: 'p',
+          content: [{ type: 'verse', marker: 'v', number: '2' }, 'Second verse.'],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)).toEqual([
+      {
+        verseNumber: 1,
+        text: 'First verse. More of the first.',
+        markers: {
+          paragraphs: [
+            { marker: 'p', offset: 0 },
+            { marker: 'p', offset: 13 },
+          ],
+        },
+      },
+      {
+        verseNumber: 2,
+        text: 'Second verse.',
+        markers: { paragraphs: [{ marker: 'p', offset: 0 }] },
+      },
+    ]);
+  });
+
   it('anchors offsets to visible text, unmoved by a footnote', () => {
     const usj: Usj = {
       type: 'USJ',
