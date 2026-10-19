@@ -2,7 +2,7 @@ import { createRef, useRef, type RefObject } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 import { fireEvent, render, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { pericopeVersesToUsj } from '../lib/pericope-usj';
 
@@ -134,17 +134,6 @@ describe('clicking into an empty verse', () => {
 });
 
 describe('clicking the number of a verse with words (#479)', () => {
-  // The caret now sits before text, and Lexical measures it to scroll it into view. jsdom has no
-  // Range geometry.
-  const rangeRect = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect');
-  beforeEach(() => {
-    Range.prototype.getBoundingClientRect = () => new DOMRect();
-  });
-  afterEach(() => {
-    if (rangeRect) Object.defineProperty(Range.prototype, 'getBoundingClientRect', rangeRect);
-    else Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect');
-  });
-
   it('puts the caret right after the number that was clicked', async () => {
     const { verse, paragraph } = await renderEditor();
     window.getSelection()!.collapse(paragraph, 0);
