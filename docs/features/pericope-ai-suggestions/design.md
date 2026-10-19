@@ -17,8 +17,11 @@ This includes source verses without a persisted translation row; the API does no
 empty placeholders for them. A section title may also arrive before that first row exists.
 Saved and locally edited text remain unchanged. A single `queue-pericopes` request identifies
 the active and next source-backed groups; the API resolves their verse ranges and queues
-missing verse drafts and eligible titles. Suggestions for the next group are fetched into
-the query cache, but are not inserted or logged until that group becomes active.
+missing verse drafts and eligible titles, each title ahead of its verses. The threshold check
+made while AI is off is a `queue-pericopes` request too, so a check that reaches the server
+after AI was switched on (the auto-enable on open) still queues titles first. Suggestions for
+the next group are fetched into the query cache, but are not inserted or logged until that
+group becomes active.
 
 Fetching retries every five seconds while a requested verse or title is missing, up to
 twelve retries in pericope view, including retries after transient fetch failures. Queue guards
@@ -59,7 +62,9 @@ if no structure remains, the save sends `markers: null`. The API independently v
 set, so an older set's in-flight result cannot become the current title.
 
 When a verse suggestion and title arrive together, one draft update carries both. This
-avoids competing updates to the first verse. Title edits use the existing debounced verse
+avoids competing updates to the first verse. Verse and title suggestions are separate
+requests, so a verse answer waits while a title request is still on its way; the server
+generates a title before its verses, and the title is never shown after them. Title edits use the existing debounced verse
 save and preserve the current verse text.
 
 ## API contract and exposure

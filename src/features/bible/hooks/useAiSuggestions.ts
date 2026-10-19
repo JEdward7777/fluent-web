@@ -101,7 +101,11 @@ export function useAiSuggestions(
     .map(([number]) => number)
     .join(',');
   const fetchHeadings = enabled && !!pericopeNumbersKey && !!requiredTitlesKey;
-  const { data: fetchedHeadings, refetch: refetchHeadings } = useQuery({
+  const {
+    data: fetchedHeadings,
+    refetch: refetchHeadings,
+    isFetching: isFetchingHeadings,
+  } = useQuery({
     queryKey: ['ai-pericope-headings', contextKey, pericopeNumbersKey],
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams({
@@ -133,16 +137,25 @@ export function useAiSuggestions(
     [enabled, fetchedHeadings]
   );
 
+  // While the active pericope still waits for its title, verse drafts wait for any title answer
+  // on its way. The server generates a title before its verses, but the two come back in separate
+  // answers, and a verse answer that lands first put the verses on screen before their title
+  // (#394 QA). The wait is one request, never the generation: an answer without the title
+  // releases the verses.
+  const activePericope = pericopeNumbersKey.split(',')[0];
+  const holdVerses =
+    isFetchingHeadings && !!activePericope && requiredTitlesKey.split(',').includes(activePericope);
+
   const suggestions = useMemo(() => {
     const map: Record<number, string> = {};
-    if (!enabled) return map;
+    if (!enabled || holdVerses) return map;
     for (const item of fetchedSuggestions ?? []) {
       if (item.bibleTextId in verseMapping && item.suggestedText.trim()) {
         map[verseMapping[item.bibleTextId]] = item.suggestedText;
       }
     }
     return map;
-  }, [fetchedSuggestions, verseMapping, enabled]);
+  }, [fetchedSuggestions, verseMapping, enabled, holdVerses]);
 
   // Check the entire group, including the prefetched group. Moving the caret
   // within one pericope does not restart requests or abandon later verses.
@@ -244,18 +257,21 @@ export function useAiSuggestions(
     if (!isPericope && queueVerseNumber <= lastQueuedVerseRef.current && !justEnabled) return;
     const controller = new AbortController();
     const queue = async () => {
-      const pericopeRequest = isPericope && enabled;
+      // Pericope view asks by pericope even for the threshold check while AI is off. Opening a
+      // chapter can switch AI on while that check is on its way, and then the server queues work:
+      // a pericope request puts each title ahead of its verses, while a verse request queued the
+      // verses of both groups with no titles, so the titles came last (#394 QA).
       const payload = {
         projectUnitId,
         bibleId,
         bookCode,
         chapterNumber,
-        ...(pericopeRequest
+        ...(isPericope
           ? { pericopeNumbers: pericopeNumbersKey.split(',') }
           : { currentVerse: queueVerseNumber }),
       };
       const res = await fetch(
-        `${config.api.url}/ai-suggestions/${pericopeRequest ? 'queue-pericopes' : 'queue-next'}`,
+        `${config.api.url}/ai-suggestions/${isPericope ? 'queue-pericopes' : 'queue-next'}`,
         {
           method: 'POST',
           credentials: 'include',

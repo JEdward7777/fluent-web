@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useAiSuggestions } from '@/features/bible/hooks/useAiSuggestions';
@@ -209,6 +209,99 @@ describe('AI requests', () => {
     await waitFor(() => expect(result.current.suggestionStatus).toBe('idle'));
   }, 10000);
 
+  describe('verse drafts and the active title', () => {
+    // The server generates a pericope's title before its verses, but the title and the verses
+    // come back in separate answers, and the verse answer can land first.
+    const shown: Array<{ verse: boolean; title: boolean }> = [];
+
+    beforeEach(() => {
+      shown.length = 0;
+      server.use(
+        http.get(`${api}/pericopes`, async ({ request }) => {
+          headingGets += 1;
+          await delay(300);
+          const numbers = new URL(request.url).searchParams.get('pericopeNumbers') ?? '';
+          const first = numbers.split(',')[0];
+          return HttpResponse.json({
+            data: [
+              {
+                pericopeNumber: first,
+                bibleTextId: first === '3' ? 109 : 104,
+                suggestedText: `Title ${first}`,
+              },
+            ],
+          });
+        })
+      );
+    });
+
+    /** Renders the hook and records, on every render, whether the verse and the title show. */
+    function track(verse: number, title: string, initialProps: HookProps) {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+      return renderHook(
+        ({ activeVerse, enabled, scope, unit }: HookProps) => {
+          const value = useAiSuggestions(unit, 2, 'GEN', 1, mapping, activeVerse, enabled, {
+            pericope: scope,
+            draftedVerseNumbers: [1, 2, 3],
+          });
+          shown.push({
+            verse: value.suggestions[verse] !== undefined,
+            title: value.headingSuggestions[title] !== undefined,
+          });
+          return value;
+        },
+        {
+          initialProps,
+          wrapper: ({ children }: { children: React.ReactNode }) => (
+            <QueryClientProvider client={client}>{children}</QueryClientProvider>
+          ),
+        }
+      );
+    }
+
+    it('never shows a verse draft before the title its answer came with', async () => {
+      track(4, '2', {
+        activeVerse: 4,
+        enabled: true,
+        scope: { ...pericope, titleVerseNumbers: { '2': 4 } },
+        unit: 1,
+      });
+
+      await waitFor(() => expect(shown.at(-1)).toEqual({ verse: true, title: true }));
+      expect(shown.filter(state => state.verse && !state.title)).toEqual([]);
+    });
+
+    it('holds cached verse drafts for the title when AI is switched back on', async () => {
+      // AI off moves on to the next pericope; its verses were prefetched, its title was not.
+      const next = {
+        verseNumbers: [9, 10],
+        nextVerseNumbers: [],
+        pericopeNumbers: ['3'],
+        titleVerseNumbers: { '3': 9 } as Record<string, number>,
+      };
+      const { rerender } = track(9, '3', {
+        activeVerse: 4,
+        enabled: true,
+        scope: pericope,
+        unit: 1,
+      });
+      await waitFor(() => expect(gets).toBeGreaterThan(0));
+      rerender({ activeVerse: 9, enabled: false, scope: next, unit: 1 });
+      shown.length = 0;
+
+      rerender({ activeVerse: 9, enabled: true, scope: next, unit: 1 });
+
+      await waitFor(() => expect(shown.at(-1)).toEqual({ verse: true, title: true }));
+      expect(shown.filter(state => state.verse && !state.title)).toEqual([]);
+    });
+
+    it('does not hold verse drafts when the active pericope has no title to wait for', async () => {
+      track(4, '2', { activeVerse: 4, enabled: true, scope: pericope, unit: 1 });
+      await waitFor(() => expect(shown.at(-1)?.verse).toBe(true));
+      expect(headingGets).toBe(0);
+    });
+  });
+
   it('does not restart title generation after the translator clears the title', async () => {
     headingReady = true;
     const titleScope = { ...pericope, titleVerseNumbers: { '2': 4 } };
@@ -346,7 +439,8 @@ describe('AI requests', () => {
 
   it('does not queue a fully drafted scope without required titles', async () => {
     const { result, rerender } = setup(false);
-    await waitFor(() => expect(queuedVerses).toHaveLength(1));
+    // The threshold check while AI is off.
+    await waitFor(() => expect(queued).toHaveLength(1));
     rerender({
       activeVerse: 4,
       enabled: true,
@@ -355,8 +449,18 @@ describe('AI requests', () => {
       draftedVerseNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     });
     await waitFor(() => expect(result.current.suggestionStatus).toBe('idle'));
-    expect(queued).toEqual([]);
+    expect(queued).toHaveLength(1);
     expect(headingGets).toBe(0);
+  });
+
+  it('checks the threshold with a pericope request while AI is off in Pericope view', async () => {
+    // Opening a chapter can switch AI on (the auto-enable preference) while this check is on its
+    // way. The server then queues work, and only a pericope request puts each title ahead of its
+    // verses; a verse request queued both groups' verses first and their titles last.
+    const { result } = setup(false);
+    await waitFor(() => expect(result.current.isAiThresholdMet).toBe(true));
+    expect(queued).toEqual([['2', '3']]);
+    expect(queuedVerses).toEqual([]);
   });
 
   it('still learns the threshold once when a drafted scope loads with AI already on', async () => {
