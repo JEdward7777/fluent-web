@@ -8,7 +8,7 @@ import {
 } from '../lib/editor-dom';
 
 /** The editor pads its non-editable markers with these; they are not words. */
-const INVISIBLE_CHARACTERS = /[​﻿]/g;
+const INVISIBLE_CHARACTERS = /[\u200B\uFEFF]/g;
 
 /** A verse is empty when nothing but other markers follows its number in the paragraph. */
 function isEmptyVerse(marker: Element): boolean {
@@ -33,8 +33,18 @@ function markerBefore(block: Element, x: number, y: number): Element | undefined
   return found;
 }
 
+/** The verse number under the point. */
+function markerAt(block: Element, x: number, y: number): Element | undefined {
+  return Array.from(block.children).find(marker => {
+    if (!marker.matches(VERSE_MARKER_SELECTOR)) return false;
+    const box = marker.getBoundingClientRect();
+    return box.left <= x && x <= box.right && box.top <= y && y <= box.bottom;
+  });
+}
+
 /**
- * Lets a click put the caret in a verse that has no words yet (#314).
+ * Lets a click on a verse number, or in a verse that has no words yet, put the caret right after
+ * that number (#314, #479).
  *
  * An empty verse is only its number, a non-editable element, so an undrafted pericope is a
  * paragraph of numbers with no text between them. Firefox cannot hold a caret between two
@@ -43,11 +53,16 @@ function markerBefore(block: Element, x: number, y: number): Element | undefined
  * leaves the caret outside the editor in Chromium too. Editorial moves the caret for its own
  * empty-verse placeholder only behind `hasActiveTextFocusBox`, which also draws its focus box.
  *
- * After the browser has handled a plain click on an empty verse's number, or on the paragraph
- * just after one, this puts the caret in the paragraph right after that number. Lexical picks
- * the position up from `selectionchange`, so typing and pasting land in that verse.
+ * A number followed by words lets the pointer through to its paragraph, so a drag can start on it
+ * (editor-shared.css). The browser then places a plain click on that number by itself and gets it
+ * wrong: Firefox puts the caret at the end of the verse before, Chromium at the start of the
+ * paragraph, so pasted words went into another verse.
+ *
+ * After the browser has handled a plain click on a verse number, or on the paragraph just after an
+ * empty verse's number, this puts the caret in the paragraph right after that number. Lexical
+ * picks the position up from `selectionchange`, so typing and pasting land in that verse.
  */
-export function useEmptyVerseCaret(
+export function useVerseNumberCaret(
   containerRef: RefObject<HTMLElement | null>,
   readOnly: boolean
 ): void {
@@ -69,8 +84,10 @@ export function useEmptyVerseCaret(
       if (!block || !root.contains(block)) return;
       // Clicks on words are the browser's to place.
       if (!clicked && target !== block) return;
-      const marker = clicked ?? markerBefore(block, event.clientX, event.clientY);
-      if (marker?.parentElement !== block || !isEmptyVerse(marker)) return;
+      const number = clicked ?? markerAt(block, event.clientX, event.clientY);
+      const marker = number ?? markerBefore(block, event.clientX, event.clientY);
+      // A click in the paragraph past a verse's words is the browser's to place too.
+      if (marker?.parentElement !== block || (!number && !isEmptyVerse(marker))) return;
 
       root.focus({ preventScroll: true });
       selection.collapse(block, Array.prototype.indexOf.call(block.childNodes, marker) + 1);

@@ -2,11 +2,11 @@ import { createRef, useRef, type RefObject } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 import { fireEvent, render, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { pericopeVersesToUsj } from '../lib/pericope-usj';
 
-import { useEmptyVerseCaret } from './useEmptyVerseCaret';
+import { useVerseNumberCaret } from './useVerseNumberCaret';
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 
@@ -29,7 +29,7 @@ function Harness({
   readOnly?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  useEmptyVerseCaret(containerRef, readOnly);
+  useVerseNumberCaret(containerRef, readOnly);
   return (
     <div ref={containerRef}>
       <Editorial
@@ -103,12 +103,12 @@ describe('clicking into an empty verse', () => {
     expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(1)) });
   });
 
-  it('leaves a click on a verse with words to the browser', async () => {
+  it('leaves a click past the number of a verse with words to the browser', async () => {
     const { verse, paragraph } = await renderEditor();
     layOut([verse(1), verse(2), verse(3)]);
     window.getSelection()!.collapse(paragraph, 0);
 
-    fireEvent.click(verse(3));
+    // Just past verse 3's number, on its words.
     fireEvent.click(paragraph, { clientX: 55, clientY: 10 });
 
     expect(caret()).toEqual({ node: paragraph, offset: 0 });
@@ -130,5 +130,40 @@ describe('clicking into an empty verse', () => {
     fireEvent.click(verse(2));
 
     expect(caret()).toEqual({ node: paragraph, offset: 0 });
+  });
+});
+
+describe('clicking the number of a verse with words (#479)', () => {
+  // The caret now sits before text, and Lexical measures it to scroll it into view. jsdom has no
+  // Range geometry.
+  const rangeRect = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect');
+  beforeEach(() => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect();
+  });
+  afterEach(() => {
+    if (rangeRect) Object.defineProperty(Range.prototype, 'getBoundingClientRect', rangeRect);
+    else Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect');
+  });
+
+  it('puts the caret right after the number that was clicked', async () => {
+    const { verse, paragraph } = await renderEditor();
+    window.getSelection()!.collapse(paragraph, 0);
+
+    fireEvent.click(verse(3));
+
+    expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(3)) });
+  });
+
+  it('puts the caret after the number when the click reaches the paragraph through it', async () => {
+    // A number followed by words lets the pointer through (editor-shared.css), so the paragraph
+    // gets the click. Firefox put the caret at the end of the verse before, Chromium at the start
+    // of the paragraph.
+    const { verse, paragraph } = await renderEditor();
+    layOut([verse(1), verse(2), verse(3)]);
+    window.getSelection()!.collapse(paragraph, 0);
+
+    fireEvent.click(paragraph, { clientX: 45, clientY: 10 });
+
+    expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(3)) });
   });
 });
