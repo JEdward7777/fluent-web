@@ -4,41 +4,59 @@ import {
   BLOCK_SELECTOR,
   EDITABLE_EDITOR_SELECTOR,
   VERSE_MARKER_SELECTOR,
+  collapseAfter,
   elementAt,
+  hasWords,
 } from '../lib/editor-dom';
-
-/** The editor pads its non-editable markers with these; they are not words. */
-const INVISIBLE_CHARACTERS = /[\u200B\uFEFF]/g;
 
 /** A verse is empty when nothing but other markers follows its number in the paragraph. */
 function isEmptyVerse(marker: Element): boolean {
   for (let node = marker.nextSibling; node; node = node.nextSibling) {
     if (node instanceof Element && node.matches(VERSE_MARKER_SELECTOR)) return true;
-    if ((node.textContent ?? '').replace(INVISIBLE_CHARACTERS, '').trim() !== '') return false;
+    if (hasWords(node.textContent ?? '')) return false;
   }
   return true;
 }
 
+/**
+ * The top and bottom of the line a verse number sits on. The paragraph's line height is taller
+ * than the number, so a click just above or below the number is still on its line. The extra
+ * height (the leading) splits evenly above and below. With `line-height: normal` the browser
+ * reports no length, and the number's own box is used.
+ */
+function lineOf(box: DOMRect, lineHeight: number): { top: number; bottom: number } {
+  const halfLeading = Math.max(0, (lineHeight - box.height) / 2);
+  return { top: box.top - halfLeading, bottom: box.bottom + halfLeading };
+}
+
+const lineHeightOf = (style: CSSStyleDeclaration): number => parseFloat(style.lineHeight) || 0;
+
 /** The last verse number before the point in reading order, so the verse the click follows. */
 function markerBefore(block: Element, x: number, y: number): Element | undefined {
-  const rtl = getComputedStyle(block).direction === 'rtl';
+  const style = getComputedStyle(block);
+  const rtl = style.direction === 'rtl';
+  const lineHeight = lineHeightOf(style);
   let found: Element | undefined;
   for (const marker of Array.from(block.children)) {
     if (!marker.matches(VERSE_MARKER_SELECTOR)) continue;
     const box = marker.getBoundingClientRect();
-    const earlierLine = box.bottom <= y;
-    const earlierOnLine = box.top <= y && y < box.bottom && (rtl ? box.right >= x : box.left <= x);
+    const line = lineOf(box, lineHeight);
+    const earlierLine = line.bottom <= y;
+    const earlierOnLine =
+      line.top <= y && y < line.bottom && (rtl ? box.right >= x : box.left <= x);
     if (earlierLine || earlierOnLine) found = marker;
   }
   return found;
 }
 
-/** The verse number under the point. */
+/** The verse number under the point, counting the bands of its line above and below it. */
 function markerAt(block: Element, x: number, y: number): Element | undefined {
+  const lineHeight = lineHeightOf(getComputedStyle(block));
   return Array.from(block.children).find(marker => {
     if (!marker.matches(VERSE_MARKER_SELECTOR)) return false;
     const box = marker.getBoundingClientRect();
-    return box.left <= x && x <= box.right && box.top <= y && y <= box.bottom;
+    const line = lineOf(box, lineHeight);
+    return box.left <= x && x <= box.right && line.top <= y && y <= line.bottom;
   });
 }
 
@@ -90,7 +108,7 @@ export function useVerseNumberCaret(
       if (marker?.parentElement !== block || (!number && !isEmptyVerse(marker))) return;
 
       root.focus({ preventScroll: true });
-      selection.collapse(block, Array.prototype.indexOf.call(block.childNodes, marker) + 1);
+      collapseAfter(selection, marker);
     };
 
     container.addEventListener('click', onClick);

@@ -1,4 +1,11 @@
-import { BLOCK_SELECTOR, SCRIPTURE_MARKER_SELECTOR, VERSE_MARKER_SELECTOR } from './editor-dom';
+import {
+  BLOCK_SELECTOR,
+  SCRIPTURE_MARKER_SELECTOR,
+  VERSE_MARKER_SELECTOR,
+  collapseAfter,
+  hasWords,
+  wordsEnd,
+} from './editor-dom';
 import { isHeadingMarker } from './heading-markers';
 
 /**
@@ -8,9 +15,6 @@ import { isHeadingMarker } from './heading-markers';
 export interface VerseCaretRequest {
   verseNumber: number;
 }
-
-/** The editor pads its non-editable markers with these; they are not words. */
-const INVISIBLE_CHARACTERS = /[\u200B\uFEFF]/g;
 
 /** The last text with words between a verse number and the next one. Headings belong to the next. */
 function lastWords(
@@ -32,7 +36,7 @@ function lastWords(
       continue;
     const block = parent.closest(BLOCK_SELECTOR)?.getAttribute('data-marker') ?? undefined;
     if (isHeadingMarker(block)) continue;
-    if (text.data.replace(INVISIBLE_CHARACTERS, '').trim() !== '') last = text;
+    if (hasWords(text.data)) last = text;
   }
   return last;
 }
@@ -50,17 +54,13 @@ export function placeCaretAtVerseEnd(root: HTMLElement, verseNumber: number): bo
     marker => marker.getAttribute('data-number') === `${verseNumber}`
   );
   const marker = markers.at(index);
-  const block = marker?.parentElement;
   const selection = window.getSelection();
-  if (index < 0 || !marker || !block || !selection) return false;
+  if (index < 0 || !marker?.parentElement || !selection) return false;
 
   const words = lastWords(root, marker, markers.at(index + 1));
   root.focus({ preventScroll: true });
-  if (words) {
-    // Before the space the editor keeps ahead of the next number, so typing continues the words.
-    selection.collapse(words, words.data.replace(/[\s\u200B\uFEFF]+$/, '').length);
-  } else {
-    selection.collapse(block, Array.prototype.indexOf.call(block.childNodes, marker) + 1);
-  }
+  // Before the space the editor keeps ahead of the next number, so typing continues the words.
+  if (words) selection.collapse(words, wordsEnd(words.data));
+  else collapseAfter(selection, marker);
   return true;
 }

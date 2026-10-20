@@ -60,6 +60,22 @@ function layOut(markers: HTMLElement[]) {
   });
 }
 
+/**
+ * Lay the verse numbers out on lines the way a browser does: each number 19px tall, centred in a
+ * 26px line, so a click can land in the band just above or below the numbers.
+ */
+function layOutLines(paragraph: HTMLElement, lines: HTMLElement[][]) {
+  paragraph.style.lineHeight = '26px';
+  lines.forEach((markers, line) => {
+    markers.forEach((marker, index) => {
+      const left = index * 20;
+      const top = line * 26 + 3.5;
+      marker.getBoundingClientRect = () =>
+        ({ left, right: left + 10, top, bottom: top + 19, width: 10, height: 19 }) as DOMRect;
+    });
+  });
+}
+
 const caret = () => {
   const selection = window.getSelection()!;
   return { node: selection.anchorNode, offset: selection.anchorOffset };
@@ -85,6 +101,26 @@ describe('clicking into an empty verse', () => {
     fireEvent.click(paragraph, { clientX: 15, clientY: 10 });
 
     expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(1)) });
+  });
+
+  it('puts the caret after the empty verse to the left of a click just below the numbers', async () => {
+    const { verse, paragraph } = await renderEditor();
+    layOutLines(paragraph, [[verse(1), verse(2), verse(3)]]);
+
+    // Past verse 1's number, in the band between the numbers and the bottom of their line.
+    fireEvent.click(paragraph, { clientX: 15, clientY: 24 });
+
+    expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(1)) });
+  });
+
+  it('puts the caret after the empty verse on the line a click just above the numbers is on', async () => {
+    const { verse, paragraph } = await renderEditor();
+    layOutLines(paragraph, [[verse(1)], [verse(2), verse(3)]]);
+
+    // Past verse 2's number, in the band at the top of the second line.
+    fireEvent.click(paragraph, { clientX: 15, clientY: 27 });
+
+    expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(2)) });
   });
 
   it('follows reading order in a right-to-left paragraph', async () => {
@@ -152,6 +188,17 @@ describe('clicking the number of a verse with words (#479)', () => {
     window.getSelection()!.collapse(paragraph, 0);
 
     fireEvent.click(paragraph, { clientX: 45, clientY: 10 });
+
+    expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(3)) });
+  });
+
+  it('counts a click just below the number as a click on it', async () => {
+    const { verse, paragraph } = await renderEditor();
+    layOutLines(paragraph, [[verse(1), verse(2), verse(3)]]);
+    window.getSelection()!.collapse(paragraph, 0);
+
+    // Under verse 3's number, between it and the bottom of its line.
+    fireEvent.click(paragraph, { clientX: 45, clientY: 24 });
 
     expect(caret()).toEqual({ node: paragraph, offset: slotAfter(verse(3)) });
   });

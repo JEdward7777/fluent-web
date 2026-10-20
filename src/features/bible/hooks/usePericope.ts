@@ -214,6 +214,8 @@ export const usePericope = ({
     revealNextVerse,
   ]);
 
+  const [caretRequest, setCaretRequest] = useState<VerseCaretRequest | null>(null);
+
   /**
    * Advance to the first verse of the next pericope (#314).
    *
@@ -223,8 +225,6 @@ export const usePericope = ({
    * `globalNextUntouchedVerse` — an untouched verse inside the pericope the drafter is leaving is
    * still inside the surface they can see and edit.
    */
-  const [caretRequest, setCaretRequest] = useState<VerseCaretRequest | null>(null);
-
   const handleNextPericopeClick = useCallback(async () => {
     if (!isPericopeMode || !currentPericopeGroup) return;
 
