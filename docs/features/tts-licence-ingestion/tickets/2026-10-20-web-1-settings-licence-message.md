@@ -1,6 +1,6 @@
 # Licence message in audio settings
 
-> **Status: DRAFT** — not yet filed. Board: Fluent (#4) → `In Progress (Product)`.
+> **Status: FILED** — GitHub: [fluent-web#592](https://github.com/eten-tech-foundation/fluent-web/issues/592). Board: Fluent (#4) → `In Progress (Product)`.
 > Suggested labels: `enhancement`, `web-app`, `ready-for-agent` · QA path: `Full QA` · Priority: P1
 
 **Parent feature:** `tts-licence-ingestion` — design and plan live in
