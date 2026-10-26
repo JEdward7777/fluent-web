@@ -7,12 +7,14 @@ import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
 import { useVerseNumberCaret } from '../hooks/useVerseNumberCaret';
+import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { EDITABLE_EDITOR_SELECTOR } from '../lib/editor-dom';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { headingErrorIn, type HeadingError } from '../lib/heading-markers';
 import {
   changedVerses,
+  continuedParagraphOf,
   pericopeVersesToUsj,
   usjToPericopeVerses,
   type PericopeVerseText,
@@ -41,6 +43,12 @@ export interface PericopeEditorProps {
   contentKey: string;
   /** Heading slots held by content edited outside this surface, keyed by verse number. */
   reservedHeadingSlots?: Record<number, number>;
+  /**
+   * The paragraph the chapter has open where this pericope starts (`paragraphOpenBefore`). A first
+   * verse that doesn't open a paragraph of its own continues it, and editing that verse doesn't
+   * save it as a new paragraph (#530).
+   */
+  continuedParagraph?: string;
   /** Called with only the verses whose text or paragraph markers changed. */
   onVersesChange: (changed: PericopeVerseText[]) => void;
   /** The verse the cursor is in, for the drafting surface's active-verse tracking. */
@@ -57,8 +65,9 @@ export interface PericopeEditorProps {
  *
  * The editor is **uncontrolled**: it owns the document once loaded, and this component mirrors
  * edits back out as verse rows. Feeding every keystroke back in as a new `usj` prop would fight
- * the editor for the cursor, so it is written back into only in two cases: `contentKey` changed,
- * or the parent filled a verse the editor holds empty (the AI suggestion path).
+ * the editor for the cursor, so it is written back into only in three cases: `contentKey`
+ * changed, the parent filled a verse the editor holds empty (the AI suggestion path), or the
+ * paragraph a continuing first verse sits in changed in the pericope before.
  *
  * Paragraph breaks the translator creates survive the trip out: `usjToPericopeVerses` derives a
  * `{marker, offset}` entry per paragraph, stored beside the verse (fluent-api#264), and stored
@@ -71,6 +80,7 @@ export function PericopeEditor({
   readOnly = false,
   contentKey,
   reservedHeadingSlots,
+  continuedParagraph,
   onVersesChange,
   onActiveVerseChange,
   caretRequest,
@@ -84,6 +94,13 @@ export function PericopeEditor({
   useVerseNumberCaret(containerRef, readOnly);
   const [headingError, setHeadingError] = useState<HeadingError>(null);
   const loadedKeyRef = useRef(contentKey);
+  /** The `continuedParagraph` the loaded document was built with. */
+  const loadedOpenRef = useRef(continuedParagraph);
+  /**
+   * The paragraph the loaded document's first verse continues, if it opens none of its own, so
+   * commits are read the way it was built.
+   */
+  const continuedRef = useRef(continuedParagraphOf(verses, continuedParagraph));
   /**
    * What the editor's own document holds, to diff each commit against — kept in *document space*
    * (the rows re-derived from the document we built), never the raw props. The document makes a
@@ -91,20 +108,28 @@ export function PericopeEditor({
    * report that upgrade as an edit on every mount.
    */
   const knownVersesRef = useRef<PericopeVerseText[]>(
-    usjToPericopeVerses(pericopeVersesToUsj(verses, chapterNumber, bookCode))
+    usjToPericopeVerses(
+      pericopeVersesToUsj(verses, chapterNumber, bookCode, continuedParagraph),
+      continuedRef.current
+    )
   );
   /** USJ we pushed in ourselves; the editor echoes it straight back and that is not an edit. */
   const suppressedJsonRef = useRef('');
+  /** A rebuild waiting for the translator to leave this box. */
+  const pendingRebuildRef = useRef(false);
 
   const loadIntoEditor = useCallback(
     (next: PericopeVerseText[]) => {
       setHeadingError(null);
-      const usj = pericopeVersesToUsj(next, chapterNumber, bookCode);
-      knownVersesRef.current = usjToPericopeVerses(usj);
+      pendingRebuildRef.current = false;
+      loadedOpenRef.current = continuedParagraph;
+      continuedRef.current = continuedParagraphOf(next, continuedParagraph);
+      const usj = pericopeVersesToUsj(next, chapterNumber, bookCode, continuedParagraph);
+      knownVersesRef.current = usjToPericopeVerses(usj, continuedRef.current);
       suppressedJsonRef.current = JSON.stringify(usj);
       editorRef.current?.setUsj(usj);
     },
-    [bookCode, chapterNumber]
+    [bookCode, chapterNumber, continuedParagraph]
   );
 
   // Text the parent wrote that the editor never held: the drafting surface fills an empty verse
@@ -131,6 +156,29 @@ export function PericopeEditor({
     loadIntoEditor(verses);
   }, [contentKey, loadIntoEditor, verses]);
 
+  // The pericope before changed the paragraph it leaves open (its last two lines joined into a
+  // Poetry line, say) while this one stayed open. A first verse that continues that paragraph
+  // follows it, as Chapter View shows it, and its next save is read against it. A rebuild resets
+  // the caret and the undo history, so if a row update from outside lands while the translator is
+  // in this box, it waits until they leave it; edits meanwhile are read the way the box was built.
+  useEffect(() => {
+    if (contentKey !== loadedKeyRef.current || continuedParagraph === loadedOpenRef.current) return;
+    loadedOpenRef.current = continuedParagraph;
+    if (continuedRef.current === undefined) return;
+    if (containerRef.current?.contains(document.activeElement)) pendingRebuildRef.current = true;
+    else loadIntoEditor(knownVersesRef.current);
+  }, [contentKey, continuedParagraph, loadIntoEditor]);
+
+  const handleBlur = useCallback(() => {
+    if (!pendingRebuildRef.current) return;
+    // Let focus settle: a move within the box, or the window losing focus, isn't leaving it.
+    setTimeout(() => {
+      if (!pendingRebuildRef.current || containerRef.current?.contains(document.activeElement))
+        return;
+      loadIntoEditor(knownVersesRef.current);
+    });
+  }, [loadIntoEditor]);
+
   // A request already there when this editor mounted was for an earlier one, e.g. before a view
   // switch. Every editor gets the request; the one holding the verse takes the caret.
   const answeredCaretRef = useRef(caretRequest);
@@ -147,7 +195,7 @@ export function PericopeEditor({
       if (json === suppressedJsonRef.current) return;
       suppressedJsonRef.current = json;
 
-      const derived = usjToPericopeVerses(usj);
+      const derived = usjToPericopeVerses(usj, continuedRef.current);
       const error = headingErrorIn(
         derived.map(verse => ({
           ...verse,
@@ -177,22 +225,26 @@ export function PericopeEditor({
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
+  const verseKeys = useVerseNumberKeys(editorRef, readOnly);
 
   return (
     <div
       ref={containerRef}
       className='pericope-editor rte-editor'
       data-testid='pericope-editor'
+      onBlurCapture={handleBlur}
       onContextMenuCapture={handleEditorContextMenu}
       onKeyDownCapture={event => {
-        if (!handleHeadingEnter(event)) handleEditorKeys(event);
+        if (!handleHeadingEnter(event) && !verseKeys.handleKeyDown(event)) handleEditorKeys(event);
       }}
-      onPasteCapture={handleEditorPaste}
+      onPasteCapture={event => {
+        if (!verseKeys.handlePaste(event)) handleEditorPaste(event);
+      }}
     >
       <HeadingValidationMessage error={headingError} />
       <Editorial
         ref={editorRef}
-        defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode)}
+        defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode, continuedParagraph)}
         options={{
           isReadonly: readOnly,
           // The drafting page supplies its own controls; the built-in toolbar would repeat once

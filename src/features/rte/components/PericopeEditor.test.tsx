@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
@@ -46,7 +46,7 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
           }),
           []
         );
-        return react.createElement('div', { 'data-testid': 'editorial' });
+        return react.createElement('div', { 'data-testid': 'editorial', tabIndex: -1 });
       }
     ),
   };
@@ -400,6 +400,128 @@ describe('PericopeEditor', () => {
         },
       },
     ]);
+  });
+
+  it('continues the paragraph the pericope before left open, without saving a break (#530)', () => {
+    const onVersesChange = vi.fn();
+    render(
+      <PericopeEditor
+        bookCode={BOOK}
+        chapterNumber={CHAPTER}
+        contentKey='a'
+        continuedParagraph='q1'
+        verses={[
+          { verseNumber: 16, text: 'Verse 16 text.', markers: null },
+          { verseNumber: 17, text: 'Verse 17 text.', markers: null },
+        ]}
+        onVersesChange={onVersesChange}
+      />
+    );
+
+    expect((editor.usj?.content[1] as { marker?: string }).marker).toBe('q1');
+
+    editor.commit?.(editor.usj as Usj);
+    expect(onVersesChange).not.toHaveBeenCalled();
+
+    typeInto(16, 'Verse 16 text. More.');
+    expect(onVersesChange).toHaveBeenCalledWith([
+      { verseNumber: 16, text: 'Verse 16 text. More.', markers: null },
+    ]);
+  });
+
+  describe('when the pericope before changes the paragraph it leaves open (#530)', () => {
+    const later = (first: PericopeVerseText['markers']): PericopeVerseText[] => [
+      { verseNumber: 16, text: 'Verse 16 text.', markers: first },
+      { verseNumber: 17, text: 'Verse 17 text.', markers: null },
+    ];
+    const firstParagraph = () => (editor.usj?.content[1] as { marker?: string }).marker;
+
+    it('shows the new paragraph and saves the first verse as continuing it', () => {
+      const onVersesChange = vi.fn();
+      const props = { bookCode: BOOK, chapterNumber: CHAPTER, contentKey: 'a', onVersesChange };
+      const { rerender } = render(
+        <PericopeEditor {...props} continuedParagraph='p' verses={later(null)} />
+      );
+
+      // The box before joins its last two lines into a Poetry line, while this one stays open.
+      rerender(<PericopeEditor {...props} continuedParagraph='q1' verses={later(null)} />);
+      expect(firstParagraph()).toBe('q1');
+
+      typeInto(16, 'Verse 16 text. More.');
+      expect(onVersesChange).toHaveBeenCalledWith([
+        { verseNumber: 16, text: 'Verse 16 text. More.', markers: null },
+      ]);
+    });
+
+    it('waits until the translator leaves the box before rebuilding it', async () => {
+      // A rebuild resets the caret and the undo history, so it never runs under the translator.
+      const onVersesChange = vi.fn();
+      const props = { bookCode: BOOK, chapterNumber: CHAPTER, contentKey: 'a', onVersesChange };
+      const { rerender } = render(
+        <>
+          <PericopeEditor {...props} continuedParagraph='p' verses={later(null)} />
+          <button type='button'>Elsewhere</button>
+        </>
+      );
+      act(() => screen.getByTestId('editorial').focus());
+
+      rerender(
+        <>
+          <PericopeEditor {...props} continuedParagraph='q1' verses={later(null)} />
+          <button type='button'>Elsewhere</button>
+        </>
+      );
+      expect(editor.setUsj).not.toHaveBeenCalled();
+      expect(firstParagraph()).toBe('p');
+
+      // Edits meanwhile are read the way the box was built.
+      typeInto(16, 'Verse 16 text. More.');
+      expect(onVersesChange).toHaveBeenLastCalledWith([
+        { verseNumber: 16, text: 'Verse 16 text. More.', markers: null },
+      ]);
+
+      act(() => screen.getByRole('button', { name: 'Elsewhere' }).focus());
+      await waitFor(() => expect(firstParagraph()).toBe('q1'));
+      expect(documentVerses()[0].text).toBe('Verse 16 text. More.');
+    });
+
+    it('keeps waiting when only the window loses focus', async () => {
+      const props = {
+        bookCode: BOOK,
+        chapterNumber: CHAPTER,
+        contentKey: 'a',
+        onVersesChange: vi.fn(),
+      };
+      const { rerender } = render(
+        <PericopeEditor {...props} continuedParagraph='p' verses={later(null)} />
+      );
+      act(() => screen.getByTestId('editorial').focus());
+      rerender(<PericopeEditor {...props} continuedParagraph='q1' verses={later(null)} />);
+
+      // Switching to another app blurs the editor but leaves it the active element.
+      fireEvent.blur(screen.getByTestId('editorial'));
+      await act(() => new Promise(resolve => setTimeout(resolve, 0)));
+      expect(editor.setUsj).not.toHaveBeenCalled();
+    });
+
+    it('leaves a first verse with a paragraph of its own alone', () => {
+      const onVersesChange = vi.fn();
+      const own = { paragraphs: [{ marker: 'p', offset: 0 }] };
+      const props = { bookCode: BOOK, chapterNumber: CHAPTER, contentKey: 'a', onVersesChange };
+      const { rerender } = render(
+        <PericopeEditor {...props} continuedParagraph='p' verses={later(own)} />
+      );
+
+      rerender(<PericopeEditor {...props} continuedParagraph='q1' verses={later(own)} />);
+      expect(editor.setUsj).not.toHaveBeenCalled();
+      expect(firstParagraph()).toBe('p');
+
+      // Its break from the paragraph before is still saved, though both are `p`.
+      typeInto(16, 'Verse 16 text. More.');
+      expect(onVersesChange).toHaveBeenCalledWith([
+        { verseNumber: 16, text: 'Verse 16 text. More.', markers: own },
+      ]);
+    });
   });
 
   it('does not re-report a split the editor merely re-echoes', () => {

@@ -7,6 +7,7 @@ import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
 import { useVerseNumberCaret } from '../hooks/useVerseNumberCaret';
+import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { formatHeadingLevel, selectionSpansBlocks } from '../lib/format-heading';
@@ -309,6 +310,7 @@ export function ChapterEditor({
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
+  const verseKeys = useVerseNumberKeys(editorRef, readOnly);
 
   return (
     <>
@@ -326,9 +328,12 @@ export function ChapterEditor({
         data-testid='chapter-editor'
         onContextMenuCapture={handleEditorContextMenu}
         onKeyDownCapture={event => {
-          if (!handleHeadingEnter(event)) handleEditorKeys(event);
+          if (!handleHeadingEnter(event) && !verseKeys.handleKeyDown(event))
+            handleEditorKeys(event);
         }}
-        onPasteCapture={handleEditorPaste}
+        onPasteCapture={event => {
+          if (!verseKeys.handlePaste(event)) handleEditorPaste(event);
+        }}
       >
         {/* Top-aligned with the source column's heading even when the row grows (chapter player). */}
         <div className='bg-background z-10 flex shrink-0 flex-wrap content-start items-start gap-2 px-6 py-3'>
