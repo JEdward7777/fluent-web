@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { TTS_KEYBOARD_SHORTCUTS } from '../hooks/useTtsKeyboardShortcuts';
 import { recordedNoticeAckStore, type RecordedNoticeAcknowledgment } from '../lib/ackStore';
 
+import { publishActiveSourceLicense } from './activeSourceLicenseStore';
 import { HideAudioSettings } from './HideAudioSettings';
 import { refreshHideAudio, setHideAudio } from './hideAudioStore';
 
@@ -14,7 +15,10 @@ const { mockFeatureFlag } = vi.hoisted(() => ({ mockFeatureFlag: vi.fn(() => tru
 
 vi.mock('@/features/flags', () => ({ useFeatureFlag: mockFeatureFlag }));
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (_key: string, fallback: string) => fallback }),
+  useTranslation: () => ({
+    t: (_key: string, fallback: string, options?: Record<string, unknown>) =>
+      fallback.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
+  }),
 }));
 
 const acknowledgments: RecordedNoticeAcknowledgment[] = [
@@ -43,6 +47,7 @@ const acknowledgments: RecordedNoticeAcknowledgment[] = [
 ];
 
 beforeEach(() => {
+  publishActiveSourceLicense(null);
   localStorage.clear();
   refreshHideAudio();
   setHideAudio(false);
@@ -163,5 +168,50 @@ describe('HideAudioSettings', () => {
     render(<HideAudioSettings />);
     act(() => setHideAudio(true));
     expect(screen.getByRole('switch', { name: 'Hide audio controls' })).toBeChecked();
+  });
+  it.each(['forbidden', 'unknown'] as const)(
+    'shows the synthesis-only note for %s while keeping the switch enabled and reactive',
+    async status => {
+      publishActiveSourceLicense({ bibleName: 'Main Bible', status });
+      const user = userEvent.setup();
+      render(<HideAudioSettings />);
+      const toggle = screen.getByRole('switch', { name: 'Hide audio controls' });
+      const note = screen.getByRole('note');
+      expect(note).toHaveTextContent(
+        "Text-to-speech isn't available for Main Bible because of its licensing terms."
+      );
+      expect(toggle).toBeEnabled();
+      expect(toggle).toHaveAccessibleDescription(note.textContent!);
+      await user.hover(screen.getByTestId('hide-audio-card'));
+      const tooltip = await screen.findByRole('tooltip');
+      const ids = toggle.getAttribute('aria-describedby')?.split(' ');
+      expect(ids).toContain(note.id);
+      expect(ids).toContain(tooltip.id);
+      await user.click(toggle);
+      expect(toggle).toBeChecked();
+    }
+  );
+  it.each(['allowed', undefined] as const)(
+    'does not claim a licensing restriction for %s',
+    status => {
+      publishActiveSourceLicense({ bibleName: 'Main Bible', status });
+      render(<HideAudioSettings />);
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+      expect(screen.getByRole('switch')).toBeEnabled();
+    }
+  );
+  it('removes the notice when the main source clears and keeps the feature gate intact', () => {
+    const release = publishActiveSourceLicense({ bibleName: 'Main Bible', status: 'unknown' });
+    const { rerender } = render(<HideAudioSettings />);
+    expect(screen.getByRole('note')).toBeInTheDocument();
+    act(release);
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    act(() => {
+      publishActiveSourceLicense({ bibleName: 'Other Bible', status: 'forbidden' });
+    });
+    mockFeatureFlag.mockReturnValue(false);
+    rerender(<HideAudioSettings />);
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
   });
 });

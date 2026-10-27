@@ -47,6 +47,7 @@ import {
   type ChapterSourceAudio,
   type ChapterSourceAudioRequest,
 } from '../resolver/sourceAudioClient';
+import { resolveTextLicenseStatus } from '../resolver/textLicenseStatus';
 import { type Playable, type Segment } from '../seam/types';
 import { RecordedRecoveryStrategy } from '../strategies/recordedRecoveryStrategy';
 import { type TtsEngine, type TtsServedFormat } from '../tts.types';
@@ -206,7 +207,7 @@ export const useSourceTtsPlayback = (
   const [, refreshFacts] = useState(0);
   const textKey = sourceChapter?.textBibleKey ?? null;
   const observedStatus = facts ? facts.observedStatus(textKey) : sourceLicence?.status;
-  const licenceStatus = facts ? facts.status(textKey) : sourceLicence?.status;
+  const licenceStatus = resolveTextLicenseStatus(facts, textKey, sourceLicence?.status);
   const [soundingRecording, setSoundingRecording] = useState<
     (RecordingProvenance & { playableKey: string; selectionKey: string }) | null
   >(null);
@@ -343,7 +344,8 @@ export const useSourceTtsPlayback = (
           cache.peek({ ...baseChapter, chapter: row.chapterNumber ?? baseChapter.chapter }),
           [row.verseNumber],
           cache.supportsOpus,
-          latest.current.licenceStatus
+          latest.current.licenceStatus,
+          latest.current.facts !== undefined
         )
       );
       return reasons.length && reasons.every(Boolean) ? (reasons[0] ?? null) : null;
@@ -415,7 +417,8 @@ export const useSourceTtsPlayback = (
               response,
               row.verseNumber,
               cache.supportsOpus,
-              latest.current.licenceStatus
+              latest.current.licenceStatus,
+              latest.current.facts !== undefined
             )
           : undefined;
       if (chapter && verdict?.bar != null) {
@@ -447,7 +450,8 @@ export const useSourceTtsPlayback = (
               latest.current.pageKey ?? '',
               chapter,
               response,
-              latest.current.licenceStatus
+              latest.current.licenceStatus,
+              latest.current.facts !== undefined
             );
           }
           toast.error(reason);
@@ -637,7 +641,12 @@ export const useSourceTtsPlayback = (
         const chapter = latest.current.sourceChapter;
         registry.setStaticAi(
           key,
-          !!chapter && knownChapterTts(cache.peek(chapter), latest.current.licenceStatus)
+          !!chapter &&
+            knownChapterTts(
+              cache.peek(chapter),
+              latest.current.licenceStatus,
+              latest.current.facts !== undefined
+            )
         );
       }
       registry.setLive(first.playableKey);
@@ -1116,7 +1125,10 @@ export const useSourceTtsPlayback = (
         ? { ...sourceChapter, chapter: row.chapterNumber ?? sourceChapter.chapter }
         : null;
       const rowResponse = rowChapter ? cache.peek(rowChapter) : undefined;
-      registry.setStaticAi(playable.key, knownChapterTts(rowResponse, licenceStatus));
+      registry.setStaticAi(
+        playable.key,
+        knownChapterTts(rowResponse, licenceStatus, facts !== undefined)
+      );
 
       // One playable per row, in row order, so the index pairs them.
       // A bar is only actionable once the recordings are known: until then the
@@ -1129,7 +1141,8 @@ export const useSourceTtsPlayback = (
         rowResponse,
         row.verseNumber,
         cache.supportsOpus,
-        licenceStatus
+        licenceStatus,
+        facts !== undefined
       );
       registry.setImpossible(
         playable.key,
@@ -1139,7 +1152,14 @@ export const useSourceTtsPlayback = (
       );
     });
     if (sourceChapter && response) {
-      noteLicenceBar(cache, pageKey ?? '', sourceChapter, response, licenceStatus);
+      noteLicenceBar(
+        cache,
+        pageKey ?? '',
+        sourceChapter,
+        response,
+        licenceStatus,
+        facts !== undefined
+      );
     }
   }, [
     cache,
