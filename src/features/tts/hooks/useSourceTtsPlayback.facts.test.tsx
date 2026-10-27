@@ -131,6 +131,25 @@ afterEach(() => {
 });
 
 describe('shared playback authority and sounding metadata', () => {
+  it('keeps recorded playback available when only the text licensing facts are unreadable', async () => {
+    const h = setup();
+    h.put(row('aq-20', 'unknown', 'Attribution for the unreadable-text recording test'));
+    const read = h.facts.read.bind(h.facts);
+    vi.spyOn(h.facts, 'read').mockImplementation((key, wait) =>
+      key === 'aq-1' ? { state: 'error' } : read(key, wait)
+    );
+    act(() => h.rerender(h.initial));
+    act(() => h.result.current.playVerse('1'));
+    await settle();
+    expect(h.result.current.recordedNoticeDialog?.notice).toBe(
+      'Attribution for the unreadable-text recording test'
+    );
+    act(() => h.result.current.closeRecordedNotice());
+    await settle();
+    expect(elements[0].playCalls).toHaveLength(1);
+    expect(elements[0].paused).toBe(false);
+    expect(h.synthesize).not.toHaveBeenCalled();
+  });
   it('holds a fresh recorded notice open, then resumes that exact run when acknowledged', async () => {
     const h = setup();
     act(() => h.result.current.playVerse('1'));

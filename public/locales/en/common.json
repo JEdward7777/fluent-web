@@ -195,5 +195,6 @@
     "renameFailed": "Failed to rename stage.",
     "deleteFailed": "Failed to delete stage.",
     "reorderFailed": "Failed to reorder stages."
-  }
+  },
+  "ttsLicenseSettingsNotice": "Text-to-speech isn't available for {{bible}} because of its licensing terms."
 }

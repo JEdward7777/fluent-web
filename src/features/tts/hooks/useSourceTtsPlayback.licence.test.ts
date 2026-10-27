@@ -1,4 +1,5 @@
 /** Host → real resolver/cache/registry → real queue, with the licence fence in place. */
+import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,6 +7,7 @@ import { Logger } from '@/lib/services/logger';
 
 import { PlaybackRegistryProvider } from '../registry/PlaybackRegistryProvider';
 import { usePlaybackRegistry } from '../registry/usePlaybackRegistry';
+import { ProviderFactsAccess } from '../resolver/providerFacts';
 import { fetchChapterSourceAudio } from '../resolver/sourceAudioClient';
 import { FakeClipElement } from '../testing/fakeClipElement';
 import {
@@ -105,6 +107,34 @@ afterEach(() => {
 });
 
 describe('the licence fence in the drafting host', () => {
+  it.each(['allowed', 'forbidden', 'unknown'] as const)(
+    'keeps unreadable provider authority unconfirmed despite cached %s media metadata',
+    async status => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      });
+      const facts = new ProviderFactsAccess(client, 1);
+      vi.spyOn(facts, 'read').mockReturnValue({ state: 'error' });
+      vi.spyOn(facts, 'ensure').mockResolvedValue(undefined);
+      vi.spyOn(facts, 'observe').mockReturnValue(() => {});
+      const warn = vi.spyOn(Logger, 'warn').mockImplementation(() => {});
+      load.mockResolvedValue({ ...windowlessChapter(), ttsLicenseStatus: status });
+      const { result, unmount } = setup({ facts, sourceLicence: { status: 'allowed' } });
+      await start(() => result.current.playVerse('row-1'));
+      expect(synthesize).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith(
+        "This Bible's audio licence could not be confirmed. Please try again."
+      );
+      expect(result.current.groupView(rows.map(row => row.verseRef)).staticAi).toBe(false);
+      for (const row of rows) {
+        expect(registry.getSnapshot(result.current.verseKey(row.verseRef)!).staticAi).toBe(false);
+        expect(reasonOf(result, row.verseRef)).toBeNull();
+      }
+      expect(warn).not.toHaveBeenCalled();
+      unmount();
+      client.clear();
+    }
+  );
   it('never synthesizes a barred Bible, and says why instead of failing silently', async () => {
     const warn = vi.spyOn(Logger, 'warn').mockImplementation(() => {});
     const { result } = setup();

@@ -1,4 +1,4 @@
-import { type ComponentPropsWithoutRef, forwardRef, useState } from 'react';
+import { type ComponentPropsWithoutRef, forwardRef, useId, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -11,19 +11,21 @@ import { AttributionDialog } from '../components/AttributionDialog';
 import { TTS_KEYBOARD_SHORTCUTS } from '../hooks/useTtsKeyboardShortcuts';
 import { recordedNoticeAckStore, type RecordedNoticeAcknowledgment } from '../lib/ackStore';
 
+import { useActiveSourceLicense } from './activeSourceLicenseStore';
 import { useHideAudio } from './useHideAudio';
 
 type ShortcutName = keyof typeof TTS_KEYBOARD_SHORTCUTS;
 
 interface ShortcutCardProps extends ComponentPropsWithoutRef<'div'> {
   checked: boolean;
+  noteId?: string;
   label: string;
   onCheckedChange: (checked: boolean) => void;
 }
 
 /** The card is Radix's pointer trigger; its generated description also reaches the switch. */
 const ShortcutCard = forwardRef<HTMLDivElement, ShortcutCardProps>(
-  ({ checked, className, label, onCheckedChange, ...props }, ref) => (
+  ({ checked, className, label, noteId, onCheckedChange, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -34,7 +36,9 @@ const ShortcutCard = forwardRef<HTMLDivElement, ShortcutCardProps>(
     >
       <span className='text-foreground text-sm font-semibold'>{label}</span>
       <Switch
-        aria-describedby={props['aria-describedby']}
+        aria-describedby={
+          [props['aria-describedby'], noteId].filter(Boolean).join(' ') || undefined
+        }
         aria-label={label}
         checked={checked}
         onCheckedChange={onCheckedChange}
@@ -48,6 +52,10 @@ export function HideAudioSettings() {
   const { t } = useTranslation();
   const sourceAudioEnabled = useFeatureFlag('sourceAudio');
   const [hidden, setHidden] = useHideAudio();
+  const sourceLicense = useActiveSourceLicense();
+  const licenseNoteId = useId();
+  const showLicenseNote =
+    sourceLicense?.status === 'forbidden' || sourceLicense?.status === 'unknown';
   const [attributions, setAttributions] = useState<readonly RecordedNoticeAcknowledgment[] | null>(
     null
   );
@@ -70,6 +78,7 @@ export function HideAudioSettings() {
               checked={hidden}
               data-testid='hide-audio-card'
               label={t('hideAudioControls', 'Hide audio controls')}
+              noteId={showLicenseNote ? licenseNoteId : undefined}
               onCheckedChange={setHidden}
             />
           </TooltipTrigger>
@@ -86,6 +95,15 @@ export function HideAudioSettings() {
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+      {showLicenseNote && (
+        <p className='text-muted-foreground text-sm' id={licenseNoteId} role='note'>
+          {t(
+            'ttsLicenseSettingsNotice',
+            "Text-to-speech isn't available for {{bible}} because of its licensing terms.",
+            { bible: sourceLicense.bibleName }
+          )}
+        </p>
+      )}
       <AttributionDialog
         entries={attributions ?? []}
         open={attributions !== null}

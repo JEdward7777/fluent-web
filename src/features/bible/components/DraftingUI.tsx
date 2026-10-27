@@ -59,6 +59,7 @@ import {
   useTtsKeyboardShortcuts,
 } from '@/features/tts';
 import { useProviderFacts } from '@/features/tts/resolver/providerFacts';
+import { usePublishSourceLicense } from '@/features/tts/settings/usePublishSourceLicense';
 import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -456,6 +457,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // `useFeatureFlags` remains here only because the verification tint below
   // needs the raw override; `flagOverrides.ts` permits exactly one direct site.
   const ttsEnabled = useAudioEnabled();
+  const sourceAudioEnabled = useFeatureFlag('sourceAudio');
   const { overrides: ttsOverrides } = useFeatureFlags();
 
   // Verification affordance, NOT a product feature (§9.2): tint the playback
@@ -1073,6 +1075,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           },
           adjacentChapters: referenceContext,
         };
+
+  usePublishSourceLicense({
+    sourceIdentity:
+      audioPanel.selectionIdentity[1] == null
+        ? null
+        : JSON.stringify([projectItem.projectId, ...audioPanel.selectionIdentity]),
+    bibleName: audioPanel.displayName,
+    textKey: audioPanel.textBibleKey,
+    fallback: projectItem.ttsLicenseStatus,
+    facts: providerFacts,
+    enabled: sourceAudioEnabled,
+  });
 
   const audioRowDrafts: SourceAudioRow[] = visibleAudioRefs.map(ref => {
     const current = ref.chapterNumber === projectItem.chapterNumber;
