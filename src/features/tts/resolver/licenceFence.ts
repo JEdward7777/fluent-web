@@ -82,6 +82,13 @@ export interface LicenceVerdict {
   recorded: boolean;
 }
 
+/** A missing legacy assignment may use media metadata; unreadable provider authority may not. */
+const statusForFence = (
+  response: ChapterSourceAudio | undefined,
+  assignedStatus: ChapterSourceAudio['ttsLicenseStatus'],
+  hasProviderAuthority: boolean
+) => (hasProviderAuthority ? assignedStatus : (assignedStatus ?? response?.ttsLicenseStatus));
+
 /**
  * What a host may say about one verse from knowledge it already holds. Does no
  * I/O. The caller passes its already resolved status: drafting resolves exact
@@ -91,9 +98,10 @@ export const licenceVerdictForVerse = (
   response: ChapterSourceAudio | undefined,
   verseNumber: number,
   supportsOpus: boolean,
-  assignedStatus?: ChapterSourceAudio['ttsLicenseStatus']
+  assignedStatus?: ChapterSourceAudio['ttsLicenseStatus'],
+  hasProviderAuthority = false
 ): LicenceVerdict => ({
-  bar: licenceBar(assignedStatus ?? response?.ttsLicenseStatus),
+  bar: licenceBar(statusForFence(response, assignedStatus, hasProviderAuthority)),
   recorded:
     response !== undefined &&
     recordedSourceForVerse(response, verseNumber, supportsOpus) !== undefined,
@@ -102,10 +110,11 @@ export const licenceVerdictForVerse = (
 /** A windowless chapter earns an AI badge only when speech is actually permitted. */
 export const knownChapterTts = (
   response: ChapterSourceAudio | undefined,
-  assignedStatus?: ChapterSourceAudio['ttsLicenseStatus']
+  assignedStatus?: ChapterSourceAudio['ttsLicenseStatus'],
+  hasProviderAuthority = false
 ): boolean =>
   response?.verseAddressable === false &&
-  licenceBar(assignedStatus ?? response.ttsLicenseStatus) === null;
+  licenceBar(statusForFence(response, assignedStatus, hasProviderAuthority)) === null;
 
 /** All supplied verses must be permanently unavailable to bar the whole playable. */
 export const impossibleLicenceReason = (
@@ -113,9 +122,10 @@ export const impossibleLicenceReason = (
   response: ChapterSourceAudio | undefined,
   verseNumbers: readonly number[],
   supportsOpus: boolean,
-  assignedStatus?: ChapterSourceAudio['ttsLicenseStatus']
+  assignedStatus?: ChapterSourceAudio['ttsLicenseStatus'],
+  hasProviderAuthority = false
 ): string | null => {
-  const bar = licenceBar(assignedStatus ?? response?.ttsLicenseStatus);
+  const bar = licenceBar(statusForFence(response, assignedStatus, hasProviderAuthority));
   if (!response || bar === null || bar === 'unconfirmed' || verseNumbers.length === 0) return null;
   return verseNumbers.every(verse => !recordedSourceForVerse(response, verse, supportsOpus))
     ? licenceBarReason(t, bar)
@@ -133,9 +143,10 @@ export const noteLicenceBar = (
   pageKey: string,
   chapter: ChapterSourceAudioRequest,
   response: ChapterSourceAudio | undefined,
-  assignedStatus?: ChapterSourceAudio['ttsLicenseStatus']
+  assignedStatus?: ChapterSourceAudio['ttsLicenseStatus'],
+  hasProviderAuthority = false
 ): void => {
-  const status = assignedStatus ?? response?.ttsLicenseStatus;
+  const status = statusForFence(response, assignedStatus, hasProviderAuthority);
   const bar = licenceBar(status);
   if (response === undefined || bar === null || bar === 'unconfirmed') return;
   let seen = logged.get(cache);

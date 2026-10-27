@@ -7,6 +7,7 @@ import {
   type ChapterSourceAudio,
   type ChapterSourceAudioRequest,
 } from './sourceAudioClient';
+import { resolveTextLicenseStatus } from './textLicenseStatus';
 
 import type { ChapterAudioCache } from './chapterCache';
 import type { ProviderFactsAccess } from './providerFacts';
@@ -115,7 +116,7 @@ export const resolvePlayables = (
               throw new DOMException('Obsolete selection', 'AbortError');
           };
           const status = () =>
-            ctx.facts ? ctx.facts.status(ctx.textBibleKey ?? null) : ctx.ttsLicenseStatus;
+            resolveTextLicenseStatus(ctx.facts, ctx.textBibleKey ?? null, ctx.ttsLicenseStatus);
           const tts = createTtsSegment(
             {
               verseRef: row.verseRef,

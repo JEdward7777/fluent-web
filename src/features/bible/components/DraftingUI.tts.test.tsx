@@ -10,7 +10,7 @@
  */
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,7 +20,10 @@ import type { PericopeContextChapter } from '@/features/bible/hooks/usePericopeC
 import type * as TtsFeature from '@/features/tts';
 import { PlaybackRegistryProvider, usePlaybackRegistry } from '@/features/tts';
 import type * as AudioModule from '@/features/tts/lib/audioElement';
+import { ProviderFactsAccess, providerFactsOptions } from '@/features/tts/resolver/providerFacts';
+import type * as ProviderFactsModule from '@/features/tts/resolver/providerFacts';
 import type * as SourceClient from '@/features/tts/resolver/sourceAudioClient';
+import { readActiveSourceLicense } from '@/features/tts/settings/activeSourceLicenseStore';
 import { refreshHideAudio, setHideAudio } from '@/features/tts/settings/hideAudioStore';
 import { FakeClipElement } from '@/features/tts/testing/fakeClipElement';
 import { windowlessChapter } from '@/features/tts/testing/sourceAudioFixtures';
@@ -374,6 +377,8 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
   },
 }));
 
+let mockProviderFacts: ProviderFactsAccess | undefined;
+
 const mockProjectItem: ProjectItem = {
   chapterAssignmentId: 1,
   projectId: 100,
@@ -448,6 +453,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  mockProviderFacts = undefined;
   localStorage.clear();
   refreshHideAudio();
   setHideAudio(false);
@@ -487,6 +493,57 @@ const selectReferenceBible = async () => {
   await openResourceArea();
   await userEvent.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
 };
+
+describe('DraftingUI — settings license publication', () => {
+  it('publishes the displayed source-pane Bible fallback, follows a reference selection, and clears on leaving', async () => {
+    const view = renderDrafting({ ...mockProjectItem, ttsLicenseStatus: 'unknown' });
+    expect(readActiveSourceLicense()).toEqual({ bibleName: 'WEB', status: 'unknown' });
+    await selectReferenceBible();
+    expect(readActiveSourceLicense()).toEqual({ bibleName: 'Hindi Bible', status: 'unknown' });
+    expect(capturedPlaybackOptions?.textBibleName).toBe('Hindi Bible');
+    view.unmount();
+    expect(readActiveSourceLicense()).toBeNull();
+  });
+  it('uses the exact visible pane provider facts ahead of assignment permission and keeps unreadable facts unconfirmed', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const facts = new ProviderFactsAccess(client, 100);
+    mockProviderFacts = facts;
+    vi.spyOn(facts, 'observe').mockImplementation((_key, listener) => facts.subscribe(listener));
+    client.setQueryData(providerFactsOptions(100, 'dbl-main').queryKey, {
+      bibleKey: 'dbl-main',
+      provider: 'dbl',
+      externalId: 'main',
+      id: 1,
+      ttsLicenseStatus: 'forbidden',
+      licenseNotice: null,
+    });
+    const referenceKey = providerFactsOptions(100, 'aq-123').queryKey;
+    client.setQueryData(referenceKey, {
+      bibleKey: 'aq-123',
+      provider: 'aquifer',
+      externalId: '123',
+      id: 2,
+      ttsLicenseStatus: 'unknown',
+      licenseNotice: null,
+    });
+    const view = renderDrafting({
+      ...mockProjectItem,
+      textBibleKey: 'dbl-main',
+      ttsLicenseStatus: 'allowed',
+    });
+    expect(readActiveSourceLicense()).toEqual({ bibleName: 'WEB', status: 'forbidden' });
+    await selectReferenceBible();
+    expect(readActiveSourceLicense()).toEqual({ bibleName: 'Hindi Bible', status: 'unknown' });
+    act(() => {
+      client.getQueryCache().find({ queryKey: referenceKey })?.setState({ status: 'error' });
+    });
+    expect(readActiveSourceLicense()).toEqual({ bibleName: 'Hindi Bible', status: undefined });
+    view.unmount();
+    client.clear();
+  });
+});
 
 // ── Flags (§6.3, T12) ───────────────────────────────────────────────────────
 
@@ -1982,7 +2039,10 @@ describe('DraftingUI — the serving tint', () => {
   });
 });
 
-vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () => undefined }));
+vi.mock('@/features/tts/resolver/providerFacts', async importOriginal => ({
+  ...(await importOriginal<typeof ProviderFactsModule>()),
+  useProviderFacts: () => mockProviderFacts,
+}));
 // These suites test audio in Chapter view, not its availability gate (#507), and the mock
 // chapter has empty verses. Treat it as complete so a 'chapter' displayMode really opens it,
 // keeping the real hook's RTE flag gate.
