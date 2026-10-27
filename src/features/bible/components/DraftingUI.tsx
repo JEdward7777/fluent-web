@@ -65,6 +65,7 @@ import {
   useTtsKeyboardShortcuts,
 } from '@/features/tts';
 import { useProviderFacts } from '@/features/tts/resolver/providerFacts';
+import { usePublishSourceLicense } from '@/features/tts/settings/usePublishSourceLicense';
 import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -350,6 +351,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // complete canonical group even while the drafting surface remains in verse mode.
   const checksEnabled = useFeatureFlag('repeatedWordCheck');
   const ttsEnabled = useAudioEnabled();
+  const sourceAudioEnabled = useFeatureFlag('sourceAudio');
   const { features: featureFlags, overrides: flagOverrides } = useFeatureFlags();
   const assistantEnabled = featureFlags.assistant;
   const assistantForceOn = flagOverrides.assistant === true;
@@ -1088,6 +1090,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           },
           adjacentChapters: referenceContext,
         };
+
+  usePublishSourceLicense({
+    sourceIdentity:
+      audioPanel.selectionIdentity[1] == null
+        ? null
+        : JSON.stringify([projectItem.projectId, ...audioPanel.selectionIdentity]),
+    bibleName: audioPanel.displayName,
+    textKey: audioPanel.textBibleKey,
+    fallback: projectItem.ttsLicenseStatus,
+    facts: providerFacts,
+    enabled: sourceAudioEnabled,
+  });
 
   const audioRowDrafts: SourceAudioRow[] = visibleAudioRefs.map(ref => {
     const current = ref.chapterNumber === projectItem.chapterNumber;
